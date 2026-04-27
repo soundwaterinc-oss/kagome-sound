@@ -27,6 +27,13 @@ input[type=text],input[type=number]{font-family:'Courier New',monospace;font-siz
 .midi-dot{width:6px;height:6px;border-radius:50%;background:#333;display:inline-block;margin-right:4px}
 .midi-dot.on{background:#5a8}
 label{color:#555;font-size:9px}
+details.adsr-panel>summary{list-style:none;font-size:8px;color:#333;cursor:pointer;user-select:none;padding:2px 0 1px}
+details.adsr-panel>summary::-webkit-details-marker{display:none}
+details.adsr-panel>summary::before{content:'▸ ADSR'}
+details.adsr-panel[open]>summary::before{content:'▾ ADSR'}
+.adsr-grid{display:grid;grid-template-columns:10px 1fr 30px;gap:0 3px;align-items:center;padding:2px 0 2px 6px}
+.adsr-grid .lbl{font-size:8px;color:#333}
+.adsr-grid .val{font-size:8px;color:#555;text-align:right}
 </style>
 </head>
 <body>
@@ -138,7 +145,8 @@ label{color:#555;font-size:9px}
     <!-- SYNTH ENGINE -->
     <div class="card">
       <div class="tag">SYNTH ENGINE / LAYER</div>
-      <div style="display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;flex-direction:column;gap:1px">
+
         <div style="display:flex;align-items:center;gap:4px">
           <span style="color:#5080c0;min-width:36px;font-size:9px">MACRO</span>
           <select class="sel" id="instMacro">
@@ -150,7 +158,17 @@ label{color:#555;font-size:9px}
             <option value="fm">FM Bass</option>
           </select>
         </div>
-        <div style="display:flex;align-items:center;gap:4px">
+        <details class="adsr-panel">
+          <summary></summary>
+          <div class="adsr-grid">
+            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.20" id="adsr_macro_a" oninput="updateADSR()"><span class="val" id="adsr_macro_av"></span>
+            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.60" id="adsr_macro_d" oninput="updateADSR()"><span class="val" id="adsr_macro_dv"></span>
+            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.70" id="adsr_macro_s" oninput="updateADSR()"><span class="val" id="adsr_macro_sv"></span>
+            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.67" id="adsr_macro_r" oninput="updateADSR()"><span class="val" id="adsr_macro_rv"></span>
+          </div>
+        </details>
+
+        <div style="display:flex;align-items:center;gap:4px;margin-top:3px">
           <span style="color:#50a850;min-width:36px;font-size:9px">MID</span>
           <select class="sel" id="instMid">
             <option value="karplus">Karplus-Strong 弦</option>
@@ -159,14 +177,34 @@ label{color:#555;font-size:9px}
             <option value="fm">FM Synth</option>
           </select>
         </div>
-        <div style="display:flex;align-items:center;gap:4px">
+        <details class="adsr-panel">
+          <summary></summary>
+          <div class="adsr-grid">
+            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.26" id="adsr_mid_a" oninput="updateADSR()"><span class="val" id="adsr_mid_av"></span>
+            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.55" id="adsr_mid_d" oninput="updateADSR()"><span class="val" id="adsr_mid_dv"></span>
+            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.60" id="adsr_mid_s" oninput="updateADSR()"><span class="val" id="adsr_mid_sv"></span>
+            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.61" id="adsr_mid_r" oninput="updateADSR()"><span class="val" id="adsr_mid_rv"></span>
+          </div>
+        </details>
+
+        <div style="display:flex;align-items:center;gap:4px;margin-top:3px">
           <span style="color:#c09040;min-width:36px;font-size:9px">MICRO</span>
           <select class="sel" id="instMicro">
             <option value="karplus">Karplus-Strong 弦</option>
-            <option value="beat">Beat</option>
+            <option value="noise">Noise Texture</option>
             <option value="fm">FM Perc</option>
           </select>
         </div>
+        <details class="adsr-panel">
+          <summary></summary>
+          <div class="adsr-grid">
+            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.08" id="adsr_micro_a" oninput="updateADSR()"><span class="val" id="adsr_micro_av"></span>
+            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.38" id="adsr_micro_d" oninput="updateADSR()"><span class="val" id="adsr_micro_dv"></span>
+            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.00" id="adsr_micro_s" oninput="updateADSR()"><span class="val" id="adsr_micro_sv"></span>
+            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.48" id="adsr_micro_r" oninput="updateADSR()"><span class="val" id="adsr_micro_rv"></span>
+          </div>
+        </details>
+
       </div>
     </div>
 
@@ -465,7 +503,7 @@ async function getAudio(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)();
     const c=actx.createDynamicsCompressor();
-    c.threshold.value=-10;c.ratio.value=4;c.attack.value=.003;c.release.value=.15;
+    c.threshold.value=-14;c.ratio.value=5;c.attack.value=.005;c.release.value=.2;
     c.connect(actx.destination);mast=c;
   }
   if(actx.state==='suspended')await actx.resume();
@@ -497,26 +535,74 @@ function acquireNode(id){
 }
 
 // ─── Synth dispatch ───────────────────────────────────────────────────────────
+
+// Shared noise buffer (2s, reused to avoid GC churn)
+let _noiseBuf=null;
+function getNoiseBuf(ctx){
+  if(_noiseBuf&&_noiseBuf.sampleRate===ctx.sampleRate)return _noiseBuf;
+  const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
+  const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  _noiseBuf=b;return b;
+}
+
 function makeSynth(instId,freq,vel,edge){
   if(!actx)return;
-  const angBin=edge?.angBin??0;
   const layer=edge?._layer??'mid';
+  const adsr=ADSR[layer];
+  const t=actx.currentTime;
+  const angBin=edge?.angBin??0;
   const bBase=[0.2,0.5,0.8][angBin/60]??0.5;
   const brightness=Math.max(0,Math.min(1,bBase+(edge?.strokeNorm!=null?(0.5-edge.strokeNorm)*0.3:0)));
   const decayBase={macro:0.9985,mid:0.996,micro:0.99}[layer]??0.996;
   const decay=Math.max(0.97,Math.min(0.9998,decayBase+(edge?.strokeNorm!=null?(edge.strokeNorm-0.5)*0.004:0)));
 
+  // Karplus / Waveguide — pooled worklets, boosted +8dB
   if(instId==='karplus'&&workletReady){
     const n=acquireNode('karplus');
-    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel,brightness,decay});setTimeout(()=>n._free=true,3500);return;}
+    const holdMs=Math.max(3500,(adsr.a+adsr.d+adsr.r)*1000+800);
+    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel*2.5,brightness,decay});setTimeout(()=>n._free=true,holdMs);return;}
   }
   if((instId==='waveguide'||instId==='waveguide_cl')&&workletReady){
     const n=acquireNode(instId);
-    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel,closed:instId==='waveguide_cl'});setTimeout(()=>n._free=true,3500);return;}
+    const holdMs=Math.max(3500,(adsr.a+adsr.d+adsr.r)*1000+800);
+    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel*2.5,closed:instId==='waveguide_cl'});setTimeout(()=>n._free=true,holdMs);return;}
   }
-  // OSC fallback
-  const t=actx.currentTime;
-  ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet,beat:synthBeat}[instId]||synthPiano)(actx,mast,freq,vel,t);
+
+  // OSC / Noise synths — attack wrapper for slow ADSR
+  let dest=mast;
+  if(adsr.a>0.05){
+    const g=actx.createGain();
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(1,t+adsr.a);
+    g.connect(mast);dest=g;
+  }
+
+  if(instId==='noise'){synthNoise(actx,dest,freq,vel,t,edge,adsr);return;}
+  ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet}[instId]||synthPiano)(actx,dest,freq,vel,t);
+}
+
+function synthNoise(ctx,d,f,v,t,edge,adsr){
+  const src=ctx.createBufferSource();
+  src.buffer=getNoiseBuf(ctx);src.loop=true;
+  // Filter freq: edge xNorm → 200–8000 Hz
+  const xNorm=edge?.xNorm??0.5;
+  const angBin=edge?.angBin??60;
+  const bp=ctx.createBiquadFilter();
+  bp.type='bandpass';
+  bp.frequency.value=200*Math.pow(40,xNorm);  // 200→8000 Hz log
+  bp.Q.value=0.5+(angBin/120)*7;              // 0.5→7.5
+  const g=ctx.createGain();
+  const peak=v*0.6;  // -3dB relative to pitched synths
+  const {a,d:dec,s:sus,r}=adsr;
+  g.gain.setValueAtTime(0,t);
+  if(a<0.002){g.gain.setValueAtTime(peak,t);}
+  else{g.gain.linearRampToValueAtTime(peak,t+a);}
+  g.gain.linearRampToValueAtTime(peak*sus,t+a+dec);
+  const holdEnd=t+a+dec+0.05;
+  g.gain.setValueAtTime(peak*sus,holdEnd);
+  g.gain.linearRampToValueAtTime(0.0001,holdEnd+Math.max(r,0.01));
+  src.connect(bp);bp.connect(g);g.connect(d);
+  src.start(t);src.stop(holdEnd+Math.max(r,0.01)+0.05);
 }
 
 function synthPiano(ctx,d,f,v,t){[[1,.35],[2,.16],[3,.08],[4,.03]].forEach(([h,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;o.detune.value=h*2.5;o.connect(g);g.connect(d);const dec=0.4+Math.pow(180/Math.max(f,60),.5)*.7;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*a,t+.005);g.gain.exponentialRampToValueAtTime(v*a*.35,t+.1);g.gain.exponentialRampToValueAtTime(.001,t+dec);o.start(t);o.stop(t+dec+.01);});}
@@ -524,7 +610,6 @@ function synthProphet(ctx,d,f,v,t){[f*.995,f*1.005].forEach(fr=>{const o=ctx.cre
 function synthOrgan(ctx,d,f,v,t){[[1,.32],[2,.16],[4,.1],[3,.07]].forEach(([h,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;g.gain.value=v*a;o.connect(g);g.connect(d);o.start(t);o.stop(t+.5);});}
 function synthRhodes(ctx,d,f,v,t){const mg=ctx.createGain();mg.connect(d);const dec=0.38+(90/Math.max(f,60))*.22;[[f,.38],[f*1.003,.17]].forEach(([fr,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=fr;o.connect(g);g.connect(mg);g.gain.setValueAtTime(v*a,t);g.gain.exponentialRampToValueAtTime(.001,t+dec);o.start(t);o.stop(t+dec+.01);});const tl=ctx.createOscillator(),tg=ctx.createGain();tl.frequency.value=4.2;tg.gain.value=.07;tl.connect(tg);tg.connect(mg.gain);tl.start(t);tl.stop(t+dec+.01);}
 function synthFM(ctx,d,f,v,t){const car=ctx.createOscillator(),mod=ctx.createOscillator(),mg=ctx.createGain(),g=ctx.createGain();car.type='sine';mod.type='sine';car.frequency.value=f;mod.frequency.value=f*1.414;mg.gain.setValueAtTime(f*2.2,t);mg.gain.exponentialRampToValueAtTime(f*.25,t+.28);mod.connect(mg);mg.connect(car.frequency);car.connect(g);g.connect(d);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*.42,t+.007);g.gain.exponentialRampToValueAtTime(.001,t+.48);car.start(t);mod.start(t);car.stop(t+.49);mod.stop(t+.49);}
-function synthBeat(ctx,d,f,v,t){const o=ctx.createOscillator(),g=ctx.createGain();o.type='triangle';o.frequency.value=f;o.connect(g);g.connect(d);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*.45,t+.003);g.gain.exponentialRampToValueAtTime(.001,t+.07);o.start(t);o.stop(t+.08);if(!actx)return;const sz=(actx.sampleRate*.003)|0,b=actx.createBuffer(1,sz,actx.sampleRate),dd=b.getChannelData(0);for(let i=0;i<sz;i++)dd[i]=(Math.random()*2-1)*Math.pow(1-i/sz,3);const src=actx.createBufferSource();src.buffer=b;const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=f*2.5;bp.Q.value=3;const g2=actx.createGain();g2.gain.value=v*.28;src.connect(bp);bp.connect(g2);g2.connect(d);src.start(t);}
 
 // ─── MIDI ─────────────────────────────────────────────────────────────────────
 let midiOut=null;
@@ -680,8 +765,8 @@ function scannerTick(s){
 
   // Sound
   makeSynth(instId,freq,vel,e);
-  if(s.chordSize>=2)makeSynth(instId,freq*1.5,vel*.7,e);
-  if(s.chordSize>=3)makeSynth(instId,freq*2,vel*.5,e);
+  if(s.chordSize>=2&&instId!=='noise')makeSynth(instId,freq*1.5,vel*.7,e);
+  if(s.chordSize>=3&&instId!=='noise')makeSynth(instId,freq*2,vel*.5,e);
 
   // MIDI
   if(midiOut?.enabled){
@@ -715,6 +800,33 @@ document.getElementById('pb').onclick=async function(){
   }
 };
 
+// ─── ADSR ─────────────────────────────────────────────────────────────────────
+// Sensible defaults; updateADSR() syncs from slider positions at init
+const ADSR={
+  macro:{a:0.005,d:0.48,s:0.70,r:1.6},
+  mid:  {a:0.010,d:0.29,s:0.60,r:0.8},
+  micro:{a:0.001,d:0.05,s:0.00,r:0.2},
+};
+const ADSR_MAX={a:10000,d:30000,r:60000};
+
+function msFromSlider(x,max){return x<0.001?0:Math.round(Math.exp(Math.log(max+1)*x)-1);}
+function fmtMs(ms){return ms<1000?ms+'ms':(ms/1000).toFixed(1)+'s';}
+
+window.updateADSR=function(){
+  ['macro','mid','micro'].forEach(layer=>{
+    const a=+document.getElementById(`adsr_${layer}_a`).value;
+    const d=+document.getElementById(`adsr_${layer}_d`).value;
+    const s=+document.getElementById(`adsr_${layer}_s`).value;
+    const r=+document.getElementById(`adsr_${layer}_r`).value;
+    const aMs=msFromSlider(a,10000),dMs=msFromSlider(d,30000),rMs=msFromSlider(r,60000);
+    ADSR[layer]={a:aMs/1000,d:dMs/1000,s,r:rMs/1000};
+    document.getElementById(`adsr_${layer}_av`).textContent=fmtMs(aMs);
+    document.getElementById(`adsr_${layer}_dv`).textContent=fmtMs(dMs);
+    document.getElementById(`adsr_${layer}_sv`).textContent=s.toFixed(2);
+    document.getElementById(`adsr_${layer}_rv`).textContent=fmtMs(rMs);
+  });
+};
+
 // ─── Language toggle ──────────────────────────────────────────────────────────
 const I18N={
   ja:{
@@ -725,6 +837,7 @@ const I18N={
     scaleCat_generative:'Generative',scaleCat_japanese:'日本',scaleCat_world:'世界',
     scaleCat_microtonal:'微分音',scaleCat_custom:'Custom →',
     inst_karplus:'Karplus-Strong 弦',inst_waveguide:'管 (開管)',inst_waveguide_cl:'管 (閉管)',
+    inst_noise:'ノイズ Texture',
     scan_diag:'対角',scan_x:'横',scan_y:'縦',scan_spiral:'渦',scan_rand:'乱',
     analyzing:'解析中…',
   },
@@ -736,6 +849,7 @@ const I18N={
     scaleCat_generative:'Generative',scaleCat_japanese:'Japanese',scaleCat_world:'World',
     scaleCat_microtonal:'Microtonal',scaleCat_custom:'Custom →',
     inst_karplus:'Karplus-Strong String',inst_waveguide:'Pipe (Open)',inst_waveguide_cl:'Pipe (Closed)',
+    inst_noise:'Noise Texture',
     scan_diag:'Diag',scan_x:'Horiz',scan_y:'Vert',scan_spiral:'Spiral',scan_rand:'Rand',
     analyzing:'Analyzing…',
   }
@@ -771,6 +885,7 @@ await Promise.all([loadScaleDB(),loadRhythmDB()]);
   const raw=buildKagome();layerFromCellDist(raw);colorEdges(raw);applyEdges(raw);
 }
 draw();
+updateADSR();
 applyLang(lang);
 
 </script>

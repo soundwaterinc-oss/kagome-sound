@@ -659,53 +659,74 @@ function stopAllNoiseDrones(){
 }
 
 function synthPiano(ctx,d,f,v,t){
-  const dec=Math.max(0.6,0.5+Math.pow(180/Math.max(f,60),0.55)*1.2);
-  // 倍音ごとに非調和デチューン、フィルタースイープ、減衰速度を変える
-  [[1,0.36,0],[2,0.20,4],[3,0.13,10],[4,0.07,18],[5,0.04,28]].forEach(([h,amp,det])=>{
-    const o=ctx.createOscillator(),fi=ctx.createBiquadFilter(),g=ctx.createGain();
-    o.type='triangle';o.frequency.value=f*h;o.detune.value=det;
-    fi.type='lowpass';
-    fi.frequency.setValueAtTime(Math.min(f*h*5,18000),t);
-    fi.frequency.exponentialRampToValueAtTime(Math.min(f*h*1.3,9000),t+dec*0.25);
-    const hd=dec*Math.pow(0.72,h-1); // 高次倍音ほど速く減衰
-    o.connect(fi);fi.connect(g);g.connect(d);
+  // Register-dependent sustain: low notes last much longer
+  const dec=Math.max(1.8,Math.min(11,8.5*Math.pow(f/65,-0.60)));
+  const bPeak=Math.min(f*13,18000), bSust=Math.min(f*2.0,5000);
+
+  // Two detuned sawtooth voices (all harmonics + string-chorus beating)
+  [-4,4].forEach(cents=>{
+    const osc=ctx.createOscillator(),fi=ctx.createBiquadFilter(),g=ctx.createGain();
+    osc.type='sawtooth';osc.frequency.value=f;osc.detune.value=cents;
+    fi.type='lowpass';fi.Q.value=0.9;
+    fi.frequency.setValueAtTime(bPeak,t);
+    fi.frequency.exponentialRampToValueAtTime(bPeak*0.35,t+0.09);
+    fi.frequency.exponentialRampToValueAtTime(bSust,t+dec*0.22);
+    osc.connect(fi);fi.connect(g);g.connect(d);
     g.gain.setValueAtTime(0,t);
-    g.gain.linearRampToValueAtTime(v*amp,t+0.004);
-    g.gain.exponentialRampToValueAtTime(v*amp*0.38,t+0.07);
-    g.gain.exponentialRampToValueAtTime(0.001,t+hd);
-    o.start(t);o.stop(t+hd+0.01);
+    g.gain.linearRampToValueAtTime(v*0.21,t+0.003);
+    g.gain.exponentialRampToValueAtTime(v*0.10,t+0.10);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dec);
+    osc.start(t);osc.stop(t+dec+0.05);
   });
-  // ハンマーノイズ（打鍵クリック）
+  // Slightly-sharp 3rd partial (Steinway inharmonic brightness)
+  const p3=ctx.createOscillator(),p3g=ctx.createGain();
+  p3.type='sine';p3.frequency.value=f*3.015;
+  p3.connect(p3g);p3g.connect(d);
+  p3g.gain.setValueAtTime(v*0.09,t+0.001);
+  p3g.gain.exponentialRampToValueAtTime(0.001,t+dec*0.27);
+  p3.start(t);p3.stop(t+dec*0.29);
+  // Hammer noise
   const ns=Math.round(ctx.sampleRate*0.018);
   const nb=ctx.createBuffer(1,ns,ctx.sampleRate);
   const nd=nb.getChannelData(0);
   for(let i=0;i<ns;i++)nd[i]=(Math.random()*2-1)*Math.pow(1-i/ns,2.5);
   const nsrc=ctx.createBufferSource();nsrc.buffer=nb;
-  const nfi=ctx.createBiquadFilter();nfi.type='bandpass';nfi.frequency.value=Math.min(f*5,7000);nfi.Q.value=2;
-  const ng=ctx.createGain();ng.gain.setValueAtTime(v*0.22,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.025);
-  nsrc.connect(nfi);nfi.connect(ng);ng.connect(d);nsrc.start(t);nsrc.stop(t+0.03);
+  const nfi=ctx.createBiquadFilter();nfi.type='bandpass';nfi.frequency.value=Math.min(f*4.5,6500);nfi.Q.value=1.8;
+  const ng=ctx.createGain();ng.gain.setValueAtTime(v*0.24,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.026);
+  nsrc.connect(nfi);nfi.connect(ng);ng.connect(d);nsrc.start(t);nsrc.stop(t+0.032);
 }
 
 function synthRhodes(ctx,d,f,v,t){
-  const dec=Math.max(0.7,0.55+(160/Math.max(f,60))*0.28);
-  // FM方式: carrier/modulator比1:1 → ローズ固有の倍音キャラ
+  // Low notes sustain much longer (real Rhodes character)
+  const dec=Math.max(2.0,Math.min(6.5,1.2+(280/Math.max(f,55))*2.8));
+  // FM 1:1 ratio — β higher at attack (bright tine), lower at sustain (warm)
+  // β = gain/f (mod_freq=f), freq-dependent to avoid harshness at high notes
+  const betaA=Math.max(0.9,Math.min(3.0,2.6*Math.pow(280/Math.max(f,55),0.42)));
   const car=ctx.createOscillator(),mod=ctx.createOscillator(),modg=ctx.createGain(),g=ctx.createGain();
   car.type='sine';mod.type='sine';car.frequency.value=f;mod.frequency.value=f;
-  // モジュレーション指数が時間で落ちる = アタック時は明るく、サステインは暖かく
-  const mi=f*1.9;
-  modg.gain.setValueAtTime(mi,t);
-  modg.gain.exponentialRampToValueAtTime(mi*0.10,t+0.28);
-  modg.gain.exponentialRampToValueAtTime(mi*0.03,t+dec*0.55);
+  modg.gain.setValueAtTime(betaA*f,t);
+  modg.gain.exponentialRampToValueAtTime(betaA*f*0.28,t+0.18);
+  modg.gain.exponentialRampToValueAtTime(betaA*f*0.12,t+dec*0.45);
   mod.connect(modg);modg.connect(car.frequency);
   car.connect(g);g.connect(d);
-  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*0.52,t+0.005);
-  g.gain.exponentialRampToValueAtTime(v*0.30,t+0.10);
-  g.gain.exponentialRampToValueAtTime(0.001,t+dec);
-  car.start(t);mod.start(t);car.stop(t+dec+0.01);mod.stop(t+dec+0.01);
-  // トレモロLFO
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(v*0.54,t+0.004);
+  g.gain.exponentialRampToValueAtTime(v*0.38,t+0.12);
+  g.gain.exponentialRampToValueAtTime(v*0.28,t+0.8);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dec);
+  car.start(t);mod.start(t);car.stop(t+dec+0.05);mod.stop(t+dec+0.05);
+  // Tremolo (5Hz amplitude mod — characteristic of Rhodes rotary speaker)
   const lfo=ctx.createOscillator(),lfog=ctx.createGain();
-  lfo.frequency.value=4.8;lfog.gain.value=v*0.032;
-  lfo.connect(lfog);lfog.connect(g.gain);lfo.start(t);lfo.stop(t+dec+0.01);
+  lfo.frequency.value=5.0;lfog.gain.value=v*0.038;
+  lfo.connect(lfog);lfog.connect(g.gain);lfo.start(t);lfo.stop(t+dec+0.05);
+  // Tine "ping": inharmonic partial at f*2.756 (distinctive Rhodes bell quality)
+  const tine=ctx.createOscillator(),tineg=ctx.createGain();
+  tine.type='sine';tine.frequency.value=f*2.756;
+  tine.connect(tineg);tineg.connect(d);
+  const td=Math.min(dec*0.38,0.85);
+  tineg.gain.setValueAtTime(v*0.18,t+0.001);
+  tineg.gain.exponentialRampToValueAtTime(0.001,t+td);
+  tine.start(t);tine.stop(t+td+0.02);
 }
 
 function synthOrgan(ctx,d,f,v,t){

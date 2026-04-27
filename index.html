@@ -27,10 +27,7 @@ input[type=text],input[type=number]{font-family:'Courier New',monospace;font-siz
 .midi-dot{width:6px;height:6px;border-radius:50%;background:#333;display:inline-block;margin-right:4px}
 .midi-dot.on{background:#5a8}
 label{color:#555;font-size:9px}
-details.adsr-panel>summary{display:block;list-style:none;font-size:8px;color:#666;cursor:pointer;user-select:none;padding:3px 0 2px}
-details.adsr-panel>summary::-webkit-details-marker{display:none}
-details.adsr-panel>summary::marker{display:none}
-.adsr-grid{display:grid;grid-template-columns:10px 1fr 30px;gap:1px 3px;align-items:center;padding:2px 0 3px 6px}
+.adsr-grid{display:grid;grid-template-columns:10px 1fr 30px;gap:2px 3px;align-items:center;padding:4px 0 3px 4px}
 .adsr-grid .lbl{font-size:8px;color:#555}
 .adsr-grid .val{font-size:8px;color:#666;text-align:right}
 </style>
@@ -144,7 +141,7 @@ details.adsr-panel>summary::marker{display:none}
     <!-- SYNTH ENGINE -->
     <div class="card">
       <div class="tag">SYNTH ENGINE / LAYER</div>
-      <div style="display:flex;flex-direction:column;gap:1px">
+      <div style="display:flex;flex-direction:column;gap:3px">
 
         <div style="display:flex;align-items:center;gap:4px">
           <span style="color:#5080c0;min-width:36px;font-size:9px">MACRO</span>
@@ -156,18 +153,16 @@ details.adsr-panel>summary::marker{display:none}
             <option value="organ">Pipe Organ</option>
             <option value="fm">FM Bass</option>
           </select>
+          <button class="btn" id="adsrBtn_macro" onclick="toggleADSR('macro')" style="padding:1px 4px;font-size:8px;flex-shrink:0">ADSR</button>
         </div>
-        <details class="adsr-panel">
-          <summary>▸ ADSR</summary>
-          <div class="adsr-grid">
-            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.20" id="adsr_macro_a" oninput="updateADSR()"><span class="val" id="adsr_macro_av"></span>
-            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.60" id="adsr_macro_d" oninput="updateADSR()"><span class="val" id="adsr_macro_dv"></span>
-            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.70" id="adsr_macro_s" oninput="updateADSR()"><span class="val" id="adsr_macro_sv"></span>
-            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.67" id="adsr_macro_r" oninput="updateADSR()"><span class="val" id="adsr_macro_rv"></span>
-          </div>
-        </details>
+        <div id="adsrPanel_macro" class="adsr-grid" style="display:none">
+          <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.20" id="adsr_macro_a" oninput="updateADSR()"><span class="val" id="adsr_macro_av"></span>
+          <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.60" id="adsr_macro_d" oninput="updateADSR()"><span class="val" id="adsr_macro_dv"></span>
+          <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.70" id="adsr_macro_s" oninput="updateADSR()"><span class="val" id="adsr_macro_sv"></span>
+          <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.67" id="adsr_macro_r" oninput="updateADSR()"><span class="val" id="adsr_macro_rv"></span>
+        </div>
 
-        <div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+        <div style="display:flex;align-items:center;gap:4px">
           <span style="color:#50a850;min-width:36px;font-size:9px">MID</span>
           <select class="sel" id="instMid">
             <option value="karplus">Karplus-Strong 弦</option>
@@ -175,34 +170,30 @@ details.adsr-panel>summary::marker{display:none}
             <option value="prophet">Prophet-5</option>
             <option value="fm">FM Synth</option>
           </select>
+          <button class="btn" id="adsrBtn_mid" onclick="toggleADSR('mid')" style="padding:1px 4px;font-size:8px;flex-shrink:0">ADSR</button>
         </div>
-        <details class="adsr-panel">
-          <summary>▸ ADSR</summary>
-          <div class="adsr-grid">
-            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.26" id="adsr_mid_a" oninput="updateADSR()"><span class="val" id="adsr_mid_av"></span>
-            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.55" id="adsr_mid_d" oninput="updateADSR()"><span class="val" id="adsr_mid_dv"></span>
-            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.60" id="adsr_mid_s" oninput="updateADSR()"><span class="val" id="adsr_mid_sv"></span>
-            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.61" id="adsr_mid_r" oninput="updateADSR()"><span class="val" id="adsr_mid_rv"></span>
-          </div>
-        </details>
+        <div id="adsrPanel_mid" class="adsr-grid" style="display:none">
+          <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.26" id="adsr_mid_a" oninput="updateADSR()"><span class="val" id="adsr_mid_av"></span>
+          <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.55" id="adsr_mid_d" oninput="updateADSR()"><span class="val" id="adsr_mid_dv"></span>
+          <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.60" id="adsr_mid_s" oninput="updateADSR()"><span class="val" id="adsr_mid_sv"></span>
+          <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.61" id="adsr_mid_r" oninput="updateADSR()"><span class="val" id="adsr_mid_rv"></span>
+        </div>
 
-        <div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+        <div style="display:flex;align-items:center;gap:4px">
           <span style="color:#c09040;min-width:36px;font-size:9px">MICRO</span>
           <select class="sel" id="instMicro">
             <option value="karplus">Karplus-Strong 弦</option>
             <option value="noise">Noise Texture</option>
             <option value="fm">FM Perc</option>
           </select>
+          <button class="btn" id="adsrBtn_micro" onclick="toggleADSR('micro')" style="padding:1px 4px;font-size:8px;flex-shrink:0">ADSR</button>
         </div>
-        <details class="adsr-panel">
-          <summary>▸ ADSR</summary>
-          <div class="adsr-grid">
-            <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.08" id="adsr_micro_a" oninput="updateADSR()"><span class="val" id="adsr_micro_av"></span>
-            <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.38" id="adsr_micro_d" oninput="updateADSR()"><span class="val" id="adsr_micro_dv"></span>
-            <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.00" id="adsr_micro_s" oninput="updateADSR()"><span class="val" id="adsr_micro_sv"></span>
-            <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.48" id="adsr_micro_r" oninput="updateADSR()"><span class="val" id="adsr_micro_rv"></span>
-          </div>
-        </details>
+        <div id="adsrPanel_micro" class="adsr-grid" style="display:none">
+          <span class="lbl">A</span><input type="range" min="0" max="1" step="0.005" value="0.08" id="adsr_micro_a" oninput="updateADSR()"><span class="val" id="adsr_micro_av"></span>
+          <span class="lbl">D</span><input type="range" min="0" max="1" step="0.005" value="0.38" id="adsr_micro_d" oninput="updateADSR()"><span class="val" id="adsr_micro_dv"></span>
+          <span class="lbl">S</span><input type="range" min="0" max="1" step="0.01"  value="0.00" id="adsr_micro_s" oninput="updateADSR()"><span class="val" id="adsr_micro_sv"></span>
+          <span class="lbl">R</span><input type="range" min="0" max="1" step="0.005" value="0.48" id="adsr_micro_r" oninput="updateADSR()"><span class="val" id="adsr_micro_rv"></span>
+        </div>
 
       </div>
     </div>
@@ -810,6 +801,14 @@ const ADSR_MAX={a:10000,d:30000,r:60000};
 
 function msFromSlider(x,max){return x<0.001?0:Math.round(Math.exp(Math.log(max+1)*x)-1);}
 function fmtMs(ms){return ms<1000?ms+'ms':(ms/1000).toFixed(1)+'s';}
+
+window.toggleADSR=function(layer){
+  const panel=document.getElementById('adsrPanel_'+layer);
+  const btn=document.getElementById('adsrBtn_'+layer);
+  const open=panel.style.display==='none';
+  panel.style.display=open?'':'none';
+  btn.classList.toggle('on',open);
+};
 
 window.updateADSR=function(){
   ['macro','mid','micro'].forEach(layer=>{

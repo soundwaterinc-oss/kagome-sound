@@ -396,9 +396,12 @@ function nextInterval(baseMs,stepIdx){
     return baseMs;
   }
   // Pattern-based
+  // unitMs = 1ステップ分の基準長（beatが1のときの間隔）
   const beats=currentRhythm.beats||[1];
-  const unit=currentRhythm.unit||1;
-  return baseMs*(beats[stepIdx%beats.length]||1)*(4/beats.length)*unit;
+  const unitMs=baseMs*(4/beats.length);
+  const beat=beats[stepIdx%beats.length];
+  // beat=0は休符：音を出さないが同じ長さ待つ
+  return Math.max(20, beat>0 ? beat*unitMs : unitMs);
 }
 
 // ─── Source switching ─────────────────────────────────────────────────────────

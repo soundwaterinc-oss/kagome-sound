@@ -567,32 +567,59 @@ function makeSynth(instId,freq,vel,edge){
     g.connect(mast);dest=g;
   }
 
-  if(instId==='noise'){synthNoise(actx,dest,freq,vel,t,edge,adsr);return;}
+  if(instId==='noise'){startNoiseDrone(edge?._scannerId??'s1',vel,edge,adsr);return;}
   ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet}[instId]||synthPiano)(actx,dest,freq,vel,t);
 }
 
-function synthNoise(ctx,d,f,v,t,edge,adsr){
-  const src=ctx.createBufferSource();
-  src.buffer=getNoiseBuf(ctx);src.loop=true;
-  // Filter freq: edge xNorm → 200–8000 Hz
+// ─── Persistent Noise Drone (one node per scanner, survives multiple ticks) ──
+const droneState={};  // scannerId → {src, gain, filter, peak}
+
+function startNoiseDrone(scannerId,vel,edge,adsr){
+  if(!actx)return;
+  const t=actx.currentTime;
   const xNorm=edge?.xNorm??0.5;
   const angBin=edge?.angBin??60;
-  const bp=ctx.createBiquadFilter();
-  bp.type='bandpass';
-  bp.frequency.value=200*Math.pow(40,xNorm);  // 200→8000 Hz log
-  bp.Q.value=0.5+(angBin/120)*7;              // 0.5→7.5
-  const g=ctx.createGain();
-  const peak=v*0.6;  // -3dB relative to pitched synths
-  const {a,d:dec,s:sus,r}=adsr;
+  const filterFreq=200*Math.pow(40,xNorm);   // 200→8000 Hz log
+  const filterQ=0.5+(angBin/120)*7;           // 0.5→7.5
+  const drone=droneState[scannerId];
+  if(drone){
+    // Already running — just modulate filter (scanner sweep effect)
+    drone.filter.frequency.linearRampToValueAtTime(filterFreq,t+0.12);
+    drone.filter.Q.linearRampToValueAtTime(filterQ,t+0.12);
+    return;
+  }
+  // Create new persistent node
+  const src=actx.createBufferSource();
+  src.buffer=getNoiseBuf(actx);src.loop=true;
+  const bp=actx.createBiquadFilter();
+  bp.type='bandpass';bp.frequency.value=filterFreq;bp.Q.value=filterQ;
+  const g=actx.createGain();
+  const peak=vel*0.6;
   g.gain.setValueAtTime(0,t);
-  if(a<0.002){g.gain.setValueAtTime(peak,t);}
-  else{g.gain.linearRampToValueAtTime(peak,t+a);}
-  g.gain.linearRampToValueAtTime(peak*sus,t+a+dec);
-  const holdEnd=t+a+dec+0.05;
-  g.gain.setValueAtTime(peak*sus,holdEnd);
-  g.gain.linearRampToValueAtTime(0.0001,holdEnd+Math.max(r,0.01));
-  src.connect(bp);bp.connect(g);g.connect(d);
-  src.start(t);src.stop(holdEnd+Math.max(r,0.01)+0.05);
+  g.gain.linearRampToValueAtTime(peak,t+Math.max(adsr.a,0.005));
+  src.connect(bp);bp.connect(g);g.connect(mast);
+  src.start(t);
+  droneState[scannerId]={src,gain:g,filter:bp,peak};
+}
+
+function stopNoiseDrone(scannerId,adsr){
+  const drone=droneState[scannerId];
+  if(!drone)return;
+  delete droneState[scannerId];
+  const t=actx?.currentTime??0;
+  const r=Math.max(adsr?.r??0.5,0.01);
+  drone.gain.gain.cancelScheduledValues(t);
+  drone.gain.gain.setValueAtTime(drone.gain.gain.value,t);
+  drone.gain.gain.linearRampToValueAtTime(0.0001,t+r);
+  const src=drone.src;
+  setTimeout(()=>{try{src.stop();}catch(e){}},r*1000+200);
+}
+
+function stopAllNoiseDrones(){
+  for(const id of Object.keys(droneState)){
+    const s=SCANNER_DEFS.find(x=>x.id===id);
+    stopNoiseDrone(id,s?ADSR[s.layer]:ADSR.micro);
+  }
 }
 
 function synthPiano(ctx,d,f,v,t){[[1,.35],[2,.16],[3,.08],[4,.03]].forEach(([h,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;o.detune.value=h*2.5;o.connect(g);g.connect(d);const dec=0.4+Math.pow(180/Math.max(f,60),.5)*.7;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*a,t+.005);g.gain.exponentialRampToValueAtTime(v*a*.35,t+.1);g.gain.exponentialRampToValueAtTime(.001,t+dec);o.start(t);o.stop(t+dec+.01);});}
@@ -711,7 +738,7 @@ window.toggleScanner=function(id){
   const s=SCANNER_DEFS.find(x=>x.id===id);s.active=!s.active;
   const btn=document.getElementById(id+'_tog');
   btn.textContent=s.active?'ON':'--';btn.classList.toggle('on',s.active);
-  if(s.active&&playing)startScanner(s);else{clearTimeout(scanTimers[id]);activeEdges.delete(id);}
+  if(s.active&&playing)startScanner(s);else{clearTimeout(scanTimers[id]);activeEdges.delete(id);stopNoiseDrone(id,ADSR[s.layer]);}
 };
 
 // ─── Playback ─────────────────────────────────────────────────────────────────
@@ -746,7 +773,7 @@ function updateReadout(s,e,freq){
 function scannerTick(s){
   if(!playing||!s.active)return;
   const seq=SEQS[s.id];if(!seq?.length)return;
-  const e={...seq[scanSteps[s.id]%seq.length],_layer:s.layer};
+  const e={...seq[scanSteps[s.id]%seq.length],_layer:s.layer,_scannerId:s.id};
   const freq=edgeToPitch(e);
   const baseVel=0.2+(e.diagScore??0.5)*.4+Math.random()*.18;
   const strokeAdj=e.strokeNorm!=null?(e.strokeNorm-0.5)*0.2:0;
@@ -776,11 +803,11 @@ function startScanner(s){
   const offset=SCANNER_DEFS.indexOf(s)*90;
   scanTimers[s.id]=setTimeout(()=>scannerTick(s),offset);
 }
-function stopScanner(s){clearTimeout(scanTimers[s.id]);activeEdges.delete(s.id);}
+function stopScanner(s){clearTimeout(scanTimers[s.id]);activeEdges.delete(s.id);stopNoiseDrone(s.id,ADSR[s.layer]);}
 
 document.getElementById('pb').onclick=async function(){
   if(playing){
-    playing=false;SCANNER_DEFS.forEach(stopScanner);activeEdges.clear();draw();
+    playing=false;SCANNER_DEFS.forEach(stopScanner);stopAllNoiseDrones();activeEdges.clear();draw();
     this.textContent='▶ PLAY';document.getElementById('readLines').innerHTML='';
     midiOut?.allNotesOff();
   }else{
@@ -816,7 +843,7 @@ window.updateADSR=function(){
     const d=+document.getElementById(`adsr_${layer}_d`).value;
     const s=+document.getElementById(`adsr_${layer}_s`).value;
     const r=+document.getElementById(`adsr_${layer}_r`).value;
-    const aMs=msFromSlider(a,10000),dMs=msFromSlider(d,30000),rMs=msFromSlider(r,60000);
+    const aMs=msFromSlider(a,60000),dMs=msFromSlider(d,60000),rMs=msFromSlider(r,120000);
     ADSR[layer]={a:aMs/1000,d:dMs/1000,s,r:rMs/1000};
     document.getElementById(`adsr_${layer}_av`).textContent=fmtMs(aMs);
     document.getElementById(`adsr_${layer}_dv`).textContent=fmtMs(dMs);

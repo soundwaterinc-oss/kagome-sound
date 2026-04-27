@@ -640,6 +640,14 @@ let playing=false,tempo=72;
 document.getElementById('tempoSlider').addEventListener('input',function(){
   tempo=+this.value;
   document.getElementById('tv').textContent=this.value;
+  if(playing){
+    SCANNER_DEFS.forEach(s=>{
+      if(s.active){
+        clearTimeout(scanTimers[s.id]);
+        scanTimers[s.id]=setTimeout(()=>scannerTick(s),0);
+      }
+    });
+  }
 });
 const INST_MAP={macro:'instMacro',mid:'instMid',micro:'instMicro'};
 const readLog=[];

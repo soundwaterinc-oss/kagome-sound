@@ -149,7 +149,7 @@ label{color:#555;font-size:9px}
             <option value="karplus">Karplus-Strong 弦</option>
             <option value="waveguide">管 (開管)</option>
             <option value="waveguide_cl">管 (閉管)</option>
-            <option value="piano">Steinway</option>
+            <option value="piano">Voice / ボイス</option>
             <option value="organ">Pipe Organ</option>
             <option value="fm">FM Bass</option>
           </select>
@@ -604,7 +604,7 @@ function makeSynth(instId,freq,vel,edge){
   }
 
   if(instId==='noise'){startNoiseDrone(edge?._scannerId??'s1',vel,edge,adsr);return;}
-  ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet}[instId]||synthPiano)(actx,dest,freq,vel,t);
+  ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet}[instId]||synthPiano)(actx,dest,freq,vel,t,edge);
 }
 
 // ─── Persistent Noise Drone (one node per scanner, survives multiple ticks) ──
@@ -658,42 +658,80 @@ function stopAllNoiseDrones(){
   }
 }
 
-function synthPiano(ctx,d,f,v,t){
-  // Register-dependent sustain: low notes last much longer
-  const dec=Math.max(1.8,Math.min(11,8.5*Math.pow(f/65,-0.60)));
-  const bPeak=Math.min(f*13,18000), bSust=Math.min(f*2.0,5000);
+/**
+ * Formant vocal synth — inspired by Kecak, Amami/Okinawan falsetto.
+ *
+ * Source: sawtooth (chest) or triangle (falsetto) at pitch
+ * Filter: 3 parallel bandpass formants (F1/F2/F3)
+ * angBin → vowel /a/ / /e/ / /i/
+ * f > 260Hz → falsetto mode (triangle source, higher formants, faster vibrato)
+ */
+function synthPiano(ctx,d,f,v,t,edge){
+  const dur=Math.max(1.5,Math.min(8,2.5+(200/Math.max(f,55))*2.0));
+  const ang=edge?.angBin??0;
+  const falset=f>260; // falsetto / 裏声 threshold
 
-  // Two detuned sawtooth voices (all harmonics + string-chorus beating)
-  [-4,4].forEach(cents=>{
-    const osc=ctx.createOscillator(),fi=ctx.createBiquadFilter(),g=ctx.createGain();
-    osc.type='sawtooth';osc.frequency.value=f;osc.detune.value=cents;
-    fi.type='lowpass';fi.Q.value=0.9;
-    fi.frequency.setValueAtTime(bPeak,t);
-    fi.frequency.exponentialRampToValueAtTime(bPeak*0.35,t+0.09);
-    fi.frequency.exponentialRampToValueAtTime(bSust,t+dec*0.22);
-    osc.connect(fi);fi.connect(g);g.connect(d);
-    g.gain.setValueAtTime(0,t);
-    g.gain.linearRampToValueAtTime(v*0.21,t+0.003);
-    g.gain.exponentialRampToValueAtTime(v*0.10,t+0.10);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+dec);
-    osc.start(t);osc.stop(t+dec+0.05);
+  // Vowel formant table [F1_hz, F1_Q, F2_hz, F2_Q, F3_hz, F3_Q]
+  const vtbl={
+    0:  falset?[280, 8,2800,14,3400,20]:[780, 9,1180,13,2550,17], // /a/
+    60: falset?[340,10,2300,16,3100,20]:[530,11,1840,15,2480,18], // /e/
+    120:falset?[250,12,3200,18,3600,22]:[270,12,2200,18,2900,22], // /i/
+  };
+  const vow=vtbl[ang]??vtbl[0];
+
+  // Glottal source (sawtooth=胸声, triangle=裏声)
+  const src=ctx.createOscillator();
+  src.type=falset?'triangle':'sawtooth';src.frequency.value=f;
+  const glp=ctx.createBiquadFilter();
+  glp.type='lowpass';glp.frequency.value=falset?Math.min(f*4,4500):Math.min(f*9,8000);glp.Q.value=0.55;
+  src.connect(glp);
+
+  // Vibrato (faster onset in falsetto, like Okinawan 裏声)
+  const vib=ctx.createOscillator(),vibg=ctx.createGain();
+  vib.frequency.value=falset?6.2:5.5;
+  vibg.gain.setValueAtTime(0,t);
+  vibg.gain.linearRampToValueAtTime(f*(falset?0.019:0.014),t+(falset?0.14:0.24));
+  vib.connect(vibg);vibg.connect(src.frequency);
+  vib.start(t);vib.stop(t+dur+0.1);
+
+  // Master envelope
+  const mg=ctx.createGain();
+  mg.gain.setValueAtTime(0,t);
+  mg.gain.linearRampToValueAtTime(v*0.54,t+0.08);
+  mg.gain.exponentialRampToValueAtTime(v*0.42,t+0.55);
+  mg.gain.setValueAtTime(v*0.42,t+dur-0.22);
+  mg.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  mg.connect(d);
+
+  // 3 formant bandpass filters (parallel)
+  [[vow[0],vow[1],1.00],[vow[2],vow[3],0.58],[vow[4],vow[5],0.16]].forEach(([ff,Q,amp])=>{
+    const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=ff;bp.Q.value=Q;
+    const fg=ctx.createGain();fg.gain.value=amp;
+    glp.connect(bp);bp.connect(fg);fg.connect(mg);
   });
-  // Slightly-sharp 3rd partial (Steinway inharmonic brightness)
-  const p3=ctx.createOscillator(),p3g=ctx.createGain();
-  p3.type='sine';p3.frequency.value=f*3.015;
-  p3.connect(p3g);p3g.connect(d);
-  p3g.gain.setValueAtTime(v*0.09,t+0.001);
-  p3g.gain.exponentialRampToValueAtTime(0.001,t+dec*0.27);
-  p3.start(t);p3.stop(t+dec*0.29);
-  // Hammer noise
-  const ns=Math.round(ctx.sampleRate*0.018);
-  const nb=ctx.createBuffer(1,ns,ctx.sampleRate);
-  const nd=nb.getChannelData(0);
-  for(let i=0;i<ns;i++)nd[i]=(Math.random()*2-1)*Math.pow(1-i/ns,2.5);
-  const nsrc=ctx.createBufferSource();nsrc.buffer=nb;
-  const nfi=ctx.createBiquadFilter();nfi.type='bandpass';nfi.frequency.value=Math.min(f*4.5,6500);nfi.Q.value=1.8;
-  const ng=ctx.createGain();ng.gain.setValueAtTime(v*0.24,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.026);
-  nsrc.connect(nfi);nfi.connect(ng);ng.connect(d);nsrc.start(t);nsrc.stop(t+0.032);
+
+  // Consonant onset burst — Kecak の「チャッ」アタック
+  const aLen=Math.round(ctx.sampleRate*0.016);
+  const aBuf=ctx.createBuffer(1,aLen,ctx.sampleRate);
+  const aData=aBuf.getChannelData(0);
+  for(let i=0;i<aLen;i++)aData[i]=(Math.random()*2-1)*Math.pow(1-i/aLen,1.8);
+  const asrc=ctx.createBufferSource();asrc.buffer=aBuf;
+  const afilt=ctx.createBiquadFilter();afilt.type='bandpass';afilt.frequency.value=2200;afilt.Q.value=2.2;
+  const ag=ctx.createGain();ag.gain.value=v*0.18;
+  asrc.connect(afilt);afilt.connect(ag);ag.connect(d);
+  asrc.start(t);asrc.stop(t+0.022);
+
+  // Breathiness (air / 息) — less in falsetto
+  const bsrc=ctx.createBufferSource();bsrc.buffer=getNoiseBuf(ctx);bsrc.loop=true;
+  const bhp=ctx.createBiquadFilter();bhp.type='highpass';bhp.frequency.value=falset?2200:1300;
+  const bg=ctx.createGain();
+  bg.gain.setValueAtTime(v*(falset?0.030:0.050),t);
+  bg.gain.setValueAtTime(v*(falset?0.030:0.050),t+dur-0.22);
+  bg.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  bsrc.connect(bhp);bhp.connect(bg);bg.connect(d);
+  bsrc.start(t);bsrc.stop(t+dur+0.1);
+
+  src.start(t);src.stop(t+dur+0.1);
 }
 
 function synthRhodes(ctx,d,f,v,t){

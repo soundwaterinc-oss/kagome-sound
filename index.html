@@ -36,12 +36,13 @@ label{color:#555;font-size:9px}
 <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end">
   <div>
     <div style="font-size:14px;font-weight:500;color:#ddd;letter-spacing:1px">EL-SYSTEMA <span style="font-size:9px;color:#445;letter-spacing:0">Poly Engine v2</span></div>
-    <div style="font-size:9px;color:#444;margin-top:2px">幾何学 × ポリリズム × 物理モデル | soundwaterinc-oss</div>
+    <div data-i18n="subtitle" style="font-size:9px;color:#444;margin-top:2px">幾何学 × ポリリズム × 物理モデル | soundwaterinc-oss</div>
   </div>
   <div style="display:flex;gap:6px;align-items:center">
     <span class="midi-dot" id="midiDot"></span>
     <span id="midiLabel" style="font-size:9px;color:#444">MIDI off</span>
     <button class="btn" id="midiToggle" onclick="toggleMIDI()">MIDI</button>
+    <button class="btn" id="langBtn" onclick="toggleLang()">EN</button>
     <button class="bigbtn" id="pb">▶ PLAY</button>
   </div>
 </div>
@@ -55,12 +56,12 @@ label{color:#555;font-size:9px}
     <div class="card">
       <div class="tag">SOURCE</div>
       <div style="display:flex;gap:4px;margin-bottom:5px">
-        <button class="src-tab active" id="tabKagome" onclick="switchSource('kagome')">籠目</button>
-        <button class="src-tab" id="tabSVG" onclick="switchSource('svg')">SVG/画像</button>
+        <button data-i18n="tabKagome" class="src-tab active" id="tabKagome" onclick="switchSource('kagome')">籠目</button>
+        <button data-i18n="tabSVG" class="src-tab" id="tabSVG" onclick="switchSource('svg')">SVG/画像</button>
       </div>
-      <div id="srcKagome" style="font-size:9px;color:#555">Built-in kagome lattice</div>
+      <div data-i18n="kagomeBuiltin" id="srcKagome" style="font-size:9px;color:#555">Built-in kagome lattice</div>
       <div id="srcSVG" style="display:none">
-        <div class="drop-zone" id="dropZone" onclick="document.getElementById('svgFile').click()">クリックまたはSVG/PNG/JPGをドロップ</div>
+        <div data-i18n="dropZone" class="drop-zone" id="dropZone" onclick="document.getElementById('svgFile').click()">クリックまたはSVG/PNG/JPGをドロップ</div>
         <input type="file" id="svgFile" accept=".svg,.png,.jpg,.jpeg,.webp" style="display:none" onchange="onSVGFile(event)">
         <div style="display:flex;gap:6px;margin-top:4px">
           <label>MinVotes <input type="number" id="imgMinVotes" value="10" min="3" max="80" style="width:34px"></label>
@@ -107,11 +108,11 @@ label{color:#555;font-size:9px}
       <div class="tag">SCALE</div>
       <div style="display:flex;gap:4px;margin-bottom:4px">
         <select class="sel" id="scaleCategory" style="flex:1" onchange="onScaleCategory()">
-          <option value="generative">Generative</option>
-          <option value="japanese">日本</option>
-          <option value="world">世界</option>
-          <option value="microtonal">微分音</option>
-          <option value="custom">Custom →</option>
+          <option value="generative" data-i18n="scaleCat_generative">Generative</option>
+          <option value="japanese" data-i18n="scaleCat_japanese">日本</option>
+          <option value="world" data-i18n="scaleCat_world">世界</option>
+          <option value="microtonal" data-i18n="scaleCat_microtonal">微分音</option>
+          <option value="custom" data-i18n="scaleCat_custom">Custom →</option>
         </select>
         <select class="sel" id="scalePreset" style="flex:1.4" onchange="onScalePreset()"></select>
       </div>
@@ -437,7 +438,7 @@ window.onSVGFile=ev=>loadFile(ev.target.files[0]);
 
 async function loadFile(file){
   if(!file)return;
-  document.getElementById('svgStatus').textContent='解析中…';
+  document.getElementById('svgStatus').textContent=I18N[lang].analyzing;
   try{
     let edges;
     if(file.type==='image/svg+xml'||file.name.endsWith('.svg')){
@@ -714,12 +715,63 @@ document.getElementById('pb').onclick=async function(){
   }
 };
 
+// ─── Language toggle ──────────────────────────────────────────────────────────
+const I18N={
+  ja:{
+    subtitle:'幾何学 × ポリリズム × 物理モデル | soundwaterinc-oss',
+    tabKagome:'籠目',tabSVG:'SVG/画像',
+    kagomeBuiltin:'Built-in kagome lattice',
+    dropZone:'クリックまたはSVG/PNG/JPGをドロップ',
+    scaleCat_generative:'Generative',scaleCat_japanese:'日本',scaleCat_world:'世界',
+    scaleCat_microtonal:'微分音',scaleCat_custom:'Custom →',
+    inst_karplus:'Karplus-Strong 弦',inst_waveguide:'管 (開管)',inst_waveguide_cl:'管 (閉管)',
+    scan_diag:'対角',scan_x:'横',scan_y:'縦',scan_spiral:'渦',scan_rand:'乱',
+    analyzing:'解析中…',
+  },
+  en:{
+    subtitle:'Geometry × Polyrhythm × Physical Model | soundwaterinc-oss',
+    tabKagome:'Kagome',tabSVG:'SVG/Image',
+    kagomeBuiltin:'Built-in kagome lattice',
+    dropZone:'Click or drop SVG/PNG/JPG',
+    scaleCat_generative:'Generative',scaleCat_japanese:'Japanese',scaleCat_world:'World',
+    scaleCat_microtonal:'Microtonal',scaleCat_custom:'Custom →',
+    inst_karplus:'Karplus-Strong String',inst_waveguide:'Pipe (Open)',inst_waveguide_cl:'Pipe (Closed)',
+    scan_diag:'Diag',scan_x:'Horiz',scan_y:'Vert',scan_spiral:'Spiral',scan_rand:'Rand',
+    analyzing:'Analyzing…',
+  }
+};
+let lang=localStorage.getItem('kagomeLang')||'ja';
+
+function applyLang(l){
+  lang=l;localStorage.setItem('kagomeLang',l);
+  document.documentElement.lang=l;
+  const T=I18N[l];
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    if(T[el.dataset.i18n]!=null)el.textContent=T[el.dataset.i18n];
+  });
+  ['instMacro','instMid','instMicro'].forEach(id=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    sel.querySelectorAll('option').forEach(opt=>{
+      const k='inst_'+opt.value;if(T[k])opt.textContent=T[k];
+    });
+  });
+  SCANNER_DEFS.forEach(s=>{
+    const sel=document.getElementById(s.id+'_scan');if(!sel)return;
+    sel.querySelectorAll('option').forEach(opt=>{
+      const k='scan_'+opt.value;if(T[k])opt.textContent=T[k];
+    });
+  });
+  document.getElementById('langBtn').textContent=l==='ja'?'EN':'JA';
+}
+window.toggleLang=function(){applyLang(lang==='ja'?'en':'ja');};
+
 // ─── Init (must be last) ──────────────────────────────────────────────────────
 await Promise.all([loadScaleDB(),loadRhythmDB()]);
 {
   const raw=buildKagome();layerFromCellDist(raw);colorEdges(raw);applyEdges(raw);
 }
 draw();
+applyLang(lang);
 
 </script>
 </body>

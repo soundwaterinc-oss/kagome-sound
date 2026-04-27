@@ -301,6 +301,78 @@ function layerFromCellDist(edges){
 
 // ─── Global state ─────────────────────────────────────────────────────────────
 let ALL_EDGES=[],LAYERS={macro:[],mid:[],micro:[]};
+let ALL_CHAINS=[],CHAIN_LAYERS={macro:[],mid:[],micro:[]};
+
+// Chain collinear adjacent edges into longer lines (crosses intersections)
+function buildChains(edges,angTol=20){
+  if(!edges.length)return[];
+  const snap=1.5;
+  const ptKey=p=>`${Math.round(p.x/snap)}_${Math.round(p.y/snap)}`;
+  const aDiff=(a,b)=>{const d=Math.abs(a-b)%180;return Math.min(d,180-d);};
+
+  // Adjacency: ptKey → [{edge, nextPt}]
+  const adj=new Map();
+  for(const e of edges){
+    const k1=ptKey(e.p1),k2=ptKey(e.p2);
+    if(!adj.has(k1))adj.set(k1,[]);
+    if(!adj.has(k2))adj.set(k2,[]);
+    adj.get(k1).push({e,next:e.p2});
+    adj.get(k2).push({e,next:e.p1});
+  }
+
+  const used=new Set();
+  const chains=[];
+
+  for(const startEdge of edges){
+    if(used.has(startEdge))continue;
+    used.add(startEdge);
+    const pts=[{...startEdge.p1},{...startEdge.p2}];
+    const segs=[startEdge];
+    const ang=startEdge.ang;
+
+    // Extend forward
+    for(;;){
+      const tail=pts[pts.length-1];
+      const cands=(adj.get(ptKey(tail))||[]).filter(({e})=>!used.has(e)&&aDiff(e.ang,ang)<angTol);
+      if(!cands.length)break;
+      const best=cands.reduce((a,b)=>aDiff(a.e.ang,ang)<=aDiff(b.e.ang,ang)?a:b);
+      used.add(best.e);segs.push(best.e);pts.push({...best.next});
+    }
+    // Extend backward
+    for(;;){
+      const head=pts[0];
+      const cands=(adj.get(ptKey(head))||[]).filter(({e})=>!used.has(e)&&aDiff(e.ang,ang)<angTol);
+      if(!cands.length)break;
+      const best=cands.reduce((a,b)=>aDiff(a.e.ang,ang)<=aDiff(b.e.ang,ang)?a:b);
+      used.add(best.e);segs.unshift(best.e);pts.unshift({...best.next});
+    }
+
+    const n=segs.length;
+    const totalLen=segs.reduce((s,e)=>s+e.len,0);
+    const mx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
+    const my=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+    chains.push({
+      pts,p1:pts[0],p2:pts[pts.length-1],
+      ang,angBin:startEdge.angBin,
+      len:totalLen,lenNorm:0,mx,my,
+      diagScore:segs.reduce((s,e)=>s+e.diagScore,0)/n,
+      xNorm:mx/W,yNorm:(H-my)/H,
+      strokeNorm:segs.reduce((s,e)=>s+(e.strokeNorm??1),0)/n,
+      baseColor:startEdge.baseColor,layer:'',cellDist:0,
+    });
+  }
+
+  // Layer by length (long=macro, short=micro) + lenNorm
+  const ls=chains.map(c=>c.len).sort((a,b)=>a-b);
+  const t1=ls[Math.floor(ls.length*.33)],t2=ls[Math.floor(ls.length*.66)];
+  const maxL=ls[ls.length-1]||1;
+  chains.forEach(c=>{
+    c.layer=c.len>=t2?'macro':c.len>=t1?'mid':'micro';
+    c.lenNorm=c.len/maxL;
+    c.cellDist=Math.hypot(c.mx-CX,c.my-CY)/(W/2);
+  });
+  return chains;
+}
 let sourceMode='kagome';
 let currentScale=[261.63,293.66,329.63,349.23,392,440,466.16,523.25];
 let SCALE_DB={},RHYTHM_DB={};
@@ -491,15 +563,21 @@ function nextInterval(baseMs,stepIdx){
 // ─── Source switching ─────────────────────────────────────────────────────────
 function applyEdges(edges){
   ALL_EDGES=edges;
+  ALL_CHAINS=buildChains(edges);
   LAYERS={
     macro:ALL_EDGES.filter(e=>e.layer==='macro'),
     mid:ALL_EDGES.filter(e=>e.layer==='mid'),
     micro:ALL_EDGES.filter(e=>e.layer==='micro'),
   };
+  CHAIN_LAYERS={
+    macro:ALL_CHAINS.filter(c=>c.layer==='macro'),
+    mid:ALL_CHAINS.filter(c=>c.layer==='mid'),
+    micro:ALL_CHAINS.filter(c=>c.layer==='micro'),
+  };
   SCANNER_DEFS.forEach(s=>{SEQS[s.id]=sortedForScanner(s);scanSteps[s.id]=0;});
   draw();
   const el=document.getElementById('svgStatus');
-  if(el&&sourceMode==='svg')el.textContent=`${edges.length} edges — macro:${LAYERS.macro.length} mid:${LAYERS.mid.length} micro:${LAYERS.micro.length}`;
+  if(el&&sourceMode==='svg')el.textContent=`${edges.length} segs → ${ALL_CHAINS.length} chains (mac:${CHAIN_LAYERS.macro.length} mid:${CHAIN_LAYERS.mid.length} mic:${CHAIN_LAYERS.micro.length})`;
 }
 
 window.switchSource=function(mode){
@@ -860,22 +938,31 @@ window.onMidiOutSelect=function(){
 const cv=document.getElementById('kc'),cx2=cv.getContext('2d');
 const activeEdges=new Map();
 
+function drawItem(item){
+  if(item.pts){
+    cx2.moveTo(item.pts[0].x,item.pts[0].y);
+    for(let i=1;i<item.pts.length;i++)cx2.lineTo(item.pts[i].x,item.pts[i].y);
+  }else{cx2.moveTo(item.p1.x,item.p1.y);cx2.lineTo(item.p2.x,item.p2.y);}
+}
+
 function draw(){
   cx2.clearRect(0,0,W,H);cx2.fillStyle='#0a0a0a';cx2.fillRect(0,0,W,H);
-  for(const e of ALL_EDGES){
-    const alpha=e.layer==='macro'?.7:e.layer==='mid'?.55:.35;
-    const lw=e.layer==='macro'?1.8:e.layer==='mid'?1.1:.6;
-    cx2.strokeStyle=(e.baseColor||'rgba(100,120,200,')+(alpha+(e.diagScore??0.5)*.2)+')';
-    cx2.lineWidth=lw;cx2.lineCap='round';
-    cx2.beginPath();cx2.moveTo(e.p1.x,e.p1.y);cx2.lineTo(e.p2.x,e.p2.y);cx2.stroke();
+  const items=ALL_CHAINS.length?ALL_CHAINS:ALL_EDGES;
+  for(const item of items){
+    const alpha=item.layer==='macro'?.7:item.layer==='mid'?.55:.35;
+    const lw=item.layer==='macro'?1.8:item.layer==='mid'?1.1:.6;
+    cx2.strokeStyle=(item.baseColor||'rgba(100,120,200,')+(alpha+(item.diagScore??0.5)*.2)+')';
+    cx2.lineWidth=lw;cx2.lineCap='round';cx2.lineJoin='round';
+    cx2.beginPath();drawItem(item);cx2.stroke();
   }
-  activeEdges.forEach((e,sid)=>{
-    if(!e)return;
+  activeEdges.forEach((item,sid)=>{
+    if(!item)return;
     const s=SCANNER_DEFS.find(x=>x.id===sid);if(!s||!s.active)return;
-    cx2.strokeStyle=s.color;cx2.lineWidth=2.8;
-    cx2.beginPath();cx2.moveTo(e.p1.x,e.p1.y);cx2.lineTo(e.p2.x,e.p2.y);cx2.stroke();
+    cx2.strokeStyle=s.color;cx2.lineWidth=2.8;cx2.lineCap='round';cx2.lineJoin='round';
+    cx2.beginPath();drawItem(item);cx2.stroke();
     cx2.fillStyle=s.color;
-    [e.p1,e.p2].forEach(p=>{cx2.beginPath();cx2.arc(p.x,p.y,2.2,0,Math.PI*2);cx2.fill();});
+    const eps=item.pts?[item.pts[0],item.pts[item.pts.length-1]]:[item.p1,item.p2];
+    eps.forEach(p=>{cx2.beginPath();cx2.arc(p.x,p.y,2.5,0,Math.PI*2);cx2.fill();});
   });
 }
 
@@ -889,13 +976,14 @@ const SCANNER_DEFS=[
 ];
 
 function sortedForScanner(s){
-  const edges=[...(LAYERS[s.layer]||[])];
-  if(s.scan==='diag') edges.sort((a,b)=>a.diagScore-b.diagScore);
-  else if(s.scan==='x') edges.sort((a,b)=>a.mx-b.mx);
-  else if(s.scan==='y') edges.sort((a,b)=>b.my-a.my);
-  else if(s.scan==='spiral') edges.sort((a,b)=>Math.hypot(b.mx-CX,b.my-CY)-Math.hypot(a.mx-CX,a.my-CY));
-  else edges.sort(()=>Math.random()-.5);
-  return edges;
+  const src=ALL_CHAINS.length?CHAIN_LAYERS:LAYERS;
+  const items=[...(src[s.layer]||[])];
+  if(s.scan==='diag') items.sort((a,b)=>a.diagScore-b.diagScore);
+  else if(s.scan==='x') items.sort((a,b)=>a.mx-b.mx);
+  else if(s.scan==='y') items.sort((a,b)=>b.my-a.my);
+  else if(s.scan==='spiral') items.sort((a,b)=>Math.hypot(b.mx-CX,b.my-CY)-Math.hypot(a.mx-CX,a.my-CY));
+  else items.sort(()=>Math.random()-.5);
+  return items;
 }
 
 const SEQS={},scanSteps={},scanTimers={};

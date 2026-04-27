@@ -1,0 +1,48 @@
+{
+  "western": {
+    "44":    { "label": "4/4 標準",     "beats": [1,1,1,1],                       "unit": 1 },
+    "34":    { "label": "3/4 ワルツ",   "beats": [1,1,1],                         "unit": 1 },
+    "68":    { "label": "6/8",          "beats": [1,0.5,0.5,1,0.5,0.5],          "unit": 0.5 },
+    "1616":  { "label": "16/16 マイクロ","beats": [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25], "unit": 0.25 },
+    "54":    { "label": "5/4 Brubeck",  "beats": [1,1,1,0.75,0.75],              "unit": 1 }
+  },
+  "africa": {
+    "ewe_bell":   { "label": "Ewe Bell (12/8)",    "beats": [1,0,0.5,0,1,0,0,1,0,0.5,0,1], "unit": 0.5, "note": "Eweの鐘パターン x.x..x.x..x." },
+    "son_clave":  { "label": "3-2 Son Clave",      "beats": [1,0,0,1,0,0,0,1,0,1,0,0,0,0,0,0], "unit": 0.25, "note": "x..x...x.x......" },
+    "rumba_clave":{ "label": "3-2 Rumba Clave",    "beats": [1,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0], "unit": 0.25, "note": "x..x....x.x....." },
+    "bembe":      { "label": "Bembé (6/8)",         "beats": [1,0,1,1,0,1,1,0,1,0,1,0],    "unit": 0.5,  "note": "ヨルバの6/8ベル" },
+    "clave_23":   { "label": "2-3 Clave",           "beats": [1,0,1,0,0,0,1,0,0,1,0,1,0,0,0,0], "unit": 0.25 }
+  },
+  "india": {
+    "tintal":   { "label": "Tintal (16拍)",  "beats": [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], "unit": 0.25, "note": "4+4+4+4" },
+    "rupak":    { "label": "Rupak (7拍)",    "beats": [1,0,0,1,0,1,0],                    "unit": 0.75, "note": "3+2+2" },
+    "jhaptal":  { "label": "Jhaptal (10拍)", "beats": [1,0,1,0,0,1,0,1,0,0],             "unit": 0.5,  "note": "2+3+2+3" },
+    "khanda":   { "label": "Khanda (5拍)",   "beats": [1,1,1,1,1],                        "unit": 1,    "note": "均等5拍" },
+    "ektal":    { "label": "Ektal (12拍)",   "beats": [1,0,1,0,0,1,1,0,1,0,1,0],         "unit": 0.5,  "note": "2+2+2+2+2+2" },
+    "dadra":    { "label": "Dadra (6拍)",    "beats": [1,0,0,1,0,0],                      "unit": 0.5 }
+  },
+  "latin": {
+    "bossa":    { "label": "Bossa Nova",     "beats": [1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,0], "unit": 0.25 },
+    "baiao":    { "label": "Baião",          "beats": [1,0,0,1,0,1,0,0,1,0,1,0,0,0,0,0], "unit": 0.25 },
+    "samba":    { "label": "Samba",          "beats": [1,0,0,1,1,0,1,0,0,1,1,0,1,0,0,0], "unit": 0.25 },
+    "cumbia":   { "label": "Cumbia",         "beats": [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0], "unit": 0.25 }
+  },
+  "balkan": {
+    "78":    { "label": "7/8 (3+2+2)",     "beats": [1,0.5,0.5,1,0.5,1,0.5],    "unit": 0.5 },
+    "78b":   { "label": "7/8 (2+2+3)",     "beats": [1,0.5,1,0.5,1,0.5,0.5],    "unit": 0.5 },
+    "98":    { "label": "9/8 (2+2+2+3)",   "beats": [1,0.5,1,0.5,1,0.5,1,0.5,0.5], "unit": 0.5 },
+    "118":   { "label": "11/8 (2+2+3+2+2)","beats": [1,0.5,1,0.5,1,0.5,0.5,1,0.5,1,0.5], "unit": 0.5 },
+    "128":   { "label": "12/8 アフリカBell","beats": [0.75,0.75,1,0.75,0.75,1,0.75,0.75,1,0.75,0.75,1], "unit": 0.75 },
+    "74":    { "label": "7/4 Carnatic",    "beats": [1,1,1,1,1,1,1],             "unit": 1 }
+  },
+  "physics": {
+    "pink":      { "label": "1/f ピンクノイズ",   "type": "function", "fn": "pink" },
+    "levy":      { "label": "Lévy Flight α=1.5", "type": "function", "fn": "levy", "alpha": 1.5 },
+    "logistic":  { "label": "Logistic Map r=3.7", "type": "function", "fn": "logistic", "r": 3.7 },
+    "fibonacci": { "label": "Fibonacci数列",      "type": "function", "fn": "fibonacci" },
+    "golden":    { "label": "黄金比スパイラル",    "type": "function", "fn": "golden" },
+    "pendulum":  { "label": "振り子（単振り子）",   "type": "function", "fn": "pendulum" },
+    "double_pendulum": { "label": "二重振り子",   "type": "function", "fn": "double_pendulum" },
+    "brownian":  { "label": "ブラウン運動",         "type": "function", "fn": "brownian" }
+  }
+}

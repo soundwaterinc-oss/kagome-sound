@@ -305,6 +305,26 @@ let sourceMode='kagome';
 let currentScale=[261.63,293.66,329.63,349.23,392,440,466.16,523.25];
 let SCALE_DB={},RHYTHM_DB={};
 
+// Expand a scale across all octaves from 40Hz to 15kHz
+function buildExtendedScale(hz){
+  if(!hz||!hz.length)return[261.63];
+  const sorted=[...hz].sort((a,b)=>a-b);
+  const base=sorted[0];
+  const ratios=sorted.map(h=>h/base);
+  let root=base;
+  while(root>40)root/=2; // step down until root <= 40Hz
+  const out=[];
+  for(let oct=root;oct<=15000;oct*=2){
+    for(const r of ratios){
+      const f=Math.round(oct*r*10)/10;
+      if(f>=40&&f<=15000)out.push(f);
+    }
+  }
+  return [...new Set(out)].sort((a,b)=>a-b);
+}
+let _extScale=buildExtendedScale(currentScale);
+function rebuildExtended(){_extScale=buildExtendedScale(currentScale);}
+
 // Mapping weights (edgeToPitch formula coefficients)
 let wX=0.40,wY=0.25,wA=0.15,wS=0.15,wL=0.05;
 
@@ -320,12 +340,13 @@ window.updateWeights=function(){
 };
 
 function edgeToPitch(e){
-  const n=currentScale.length-1;
+  const scale=_extScale.length?_extScale:currentScale;
+  const n=scale.length-1;
   let c=e.xNorm*wX + e.yNorm*wY + (e.angBin/120)*wA;
   if(e.strokeNorm!=null) c+=(0.5-e.strokeNorm)*wS;
   if(e.lenNorm!=null)    c+=(0.5-e.lenNorm)*wL;
   c=Math.max(0,Math.min(1,c));
-  return currentScale[Math.min(n,Math.round(c*n))];
+  return scale[Math.min(n,Math.round(c*n))];
 }
 
 // ─── Scale DB ─────────────────────────────────────────────────────────────────
@@ -363,14 +384,14 @@ window.onScaleCategory=function(){
 window.onScalePreset=function(){
   try{
     const raw=document.getElementById('scalePreset').value;
-    if(raw)currentScale=JSON.parse(raw);
+    if(raw){currentScale=JSON.parse(raw);rebuildExtended();}
   }catch(e){}
 };
 
 window.parseCustomScale=function(){
   try{
     const vals=document.getElementById('customScale').value.split(',').map(Number).filter(x=>x>20&&x<20000);
-    if(vals.length>2)currentScale=vals;
+    if(vals.length>2){currentScale=vals;rebuildExtended();}
   }catch(e){}
 };
 
@@ -860,11 +881,11 @@ function draw(){
 
 // ─── Scanners ─────────────────────────────────────────────────────────────────
 const SCANNER_DEFS=[
-  {id:'s1',label:'S1',layer:'macro',mult:1,   color:'#5080c0',active:true, chordSize:3,scan:'diag'},
-  {id:'s2',label:'S2',layer:'mid',  mult:0.5, color:'#50a850',active:true, chordSize:2,scan:'x'},
-  {id:'s3',label:'S3',layer:'micro',mult:0.25,color:'#c09040',active:true, chordSize:1,scan:'y'},
-  {id:'s4',label:'S4',layer:'mid',  mult:0.75,color:'#a050a0',active:false,chordSize:2,scan:'spiral'},
-  {id:'s5',label:'S5',layer:'micro',mult:0.33,color:'#a05040',active:false,chordSize:1,scan:'rand'},
+  {id:'s1',label:'S1',layer:'macro',mult:1,   color:'#5080c0',active:true, chordSize:3,scan:'diag',  span:1},
+  {id:'s2',label:'S2',layer:'mid',  mult:0.5, color:'#50a850',active:true, chordSize:2,scan:'x',     span:1},
+  {id:'s3',label:'S3',layer:'micro',mult:0.25,color:'#c09040',active:true, chordSize:1,scan:'y',     span:1},
+  {id:'s4',label:'S4',layer:'mid',  mult:0.75,color:'#a050a0',active:false,chordSize:2,scan:'spiral',span:1},
+  {id:'s5',label:'S5',layer:'micro',mult:0.33,color:'#a05040',active:false,chordSize:1,scan:'rand',  span:1},
 ];
 
 function sortedForScanner(s){
@@ -894,6 +915,9 @@ SCANNER_DEFS.forEach((s,si)=>{
     <select id="${s.id}_layer" style="font-size:9px;padding:1px 2px;background:#111;color:#888;border:0.5px solid #222;border-radius:2px">
       <option value="macro">MAC</option><option value="mid" selected>MID</option><option value="micro">MIC</option>
     </select>
+    <select id="${s.id}_span" title="edges per tick" style="font-size:9px;padding:1px 2px;background:#111;color:#888;border:0.5px solid #222;border-radius:2px;width:30px">
+      <option value="1">×1</option><option value="2">×2</option><option value="3">×3</option>
+    </select>
     <input type="range" min="1" max="16" step="0.5" value="${1/s.mult}" id="${s.id}_spd" style="width:36px">
     <button class="btn ${s.active?'on':''}" id="${s.id}_tog" onclick="toggleScanner('${s.id}')" style="padding:1px 5px">${s.active?'ON':'--'}</button>`;
   scanContainer.appendChild(div);
@@ -902,6 +926,8 @@ SCANNER_DEFS.forEach((s,si)=>{
   layerEl.onchange=()=>{s.layer=layerEl.value;SEQS[s.id]=sortedForScanner(s);scanSteps[s.id]=0;};
   div.querySelector(`#${s.id}_scan`).value=s.scan;
   div.querySelector(`#${s.id}_scan`).onchange=function(){s.scan=this.value;SEQS[s.id]=sortedForScanner(s);scanSteps[s.id]=0;};
+  div.querySelector(`#${s.id}_span`).value=String(s.span??1);
+  div.querySelector(`#${s.id}_span`).onchange=function(){s.span=+this.value;};
   div.querySelector(`#${s.id}_spd`).oninput=function(){s.mult=1/+this.value;};
 });
 
@@ -944,26 +970,37 @@ function updateReadout(s,e,freq){
 function scannerTick(s){
   if(!playing||!s.active)return;
   const seq=SEQS[s.id];if(!seq?.length)return;
-  const e={...seq[scanSteps[s.id]%seq.length],_layer:s.layer,_scannerId:s.id};
-  const freq=edgeToPitch(e);
-  const baseVel=0.2+(e.diagScore??0.5)*.4+Math.random()*.18;
-  const strokeAdj=e.strokeNorm!=null?(e.strokeNorm-0.5)*0.2:0;
-  const vel=Math.max(0.05,Math.min(1,baseVel+strokeAdj));
+  const span=s.span??1;
+  const step=scanSteps[s.id];
   const instId=document.getElementById(INST_MAP[s.layer]).value;
 
-  // Sound
-  makeSynth(instId,freq,vel,e);
-  if(s.chordSize>=2&&instId!=='noise')makeSynth(instId,freq*1.5,vel*.7,e);
-  if(s.chordSize>=3&&instId!=='noise')makeSynth(instId,freq*2,vel*.5,e);
+  // Fire 1–3 edges per tick; subsequent edges staggered by 22ms
+  for(let i=0;i<span;i++){
+    const e={...seq[(step+i)%seq.length],_layer:s.layer,_scannerId:s.id};
+    const freq=edgeToPitch(e);
+    const baseVel=0.2+(e.diagScore??0.5)*.4+Math.random()*.18;
+    const vel=Math.max(0.05,Math.min(1,baseVel+(e.strokeNorm!=null?(e.strokeNorm-0.5)*0.2:0)));
+    const vScale=i===0?1:0.75; // softer for extra edges
 
-  // MIDI
-  if(midiOut?.enabled){
-    const si=SCANNER_DEFS.indexOf(s);
-    midiOut.noteOn(si,freq,vel,e);
-    setTimeout(()=>midiOut?.noteOff(si,freq),300+e.lenNorm*700||400);
+    const fire=(ee,fr,vl)=>{
+      makeSynth(instId,fr,vl,ee);
+      if(s.chordSize>=2&&instId!=='noise')makeSynth(instId,fr*1.5,vl*.7,ee);
+      if(s.chordSize>=3&&instId!=='noise')makeSynth(instId,fr*2,vl*.5,ee);
+      if(midiOut?.enabled){
+        const si=SCANNER_DEFS.indexOf(s);
+        midiOut.noteOn(si,fr,vl,ee);
+        setTimeout(()=>midiOut?.noteOff(si,fr),(300+(ee.lenNorm??0)*700)||400);
+      }
+    };
+
+    if(i===0){
+      fire(e,freq,vel*vScale);
+      activeEdges.set(s.id,e);draw();updateReadout(s,e,freq);
+    } else {
+      setTimeout(fire,i*22,e,freq,vel*vScale);
+    }
   }
 
-  activeEdges.set(s.id,e);draw();updateReadout(s,e,freq);
   scanSteps[s.id]++;
   const ms=nextInterval((60000/tempo)*s.mult,scanSteps[s.id]);
   scanTimers[s.id]=setTimeout(()=>scannerTick(s),Math.max(20,ms));

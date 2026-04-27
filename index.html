@@ -916,7 +916,7 @@ SCANNER_DEFS.forEach((s,si)=>{
       <option value="macro">MAC</option><option value="mid" selected>MID</option><option value="micro">MIC</option>
     </select>
     <select id="${s.id}_span" title="edges per tick" style="font-size:9px;padding:1px 2px;background:#111;color:#888;border:0.5px solid #222;border-radius:2px;width:30px">
-      <option value="1">×1</option><option value="2">×2</option><option value="3">×3</option>
+      <option value="1">r1</option><option value="2">r2</option><option value="3">r3</option>
     </select>
     <input type="range" min="1" max="16" step="0.5" value="${1/s.mult}" id="${s.id}_spd" style="width:36px">
     <button class="btn ${s.active?'on':''}" id="${s.id}_tog" onclick="toggleScanner('${s.id}')" style="padding:1px 5px">${s.active?'ON':'--'}</button>`;
@@ -970,7 +970,7 @@ function updateReadout(s,e,freq){
 function scannerTick(s){
   if(!playing||!s.active)return;
   const seq=SEQS[s.id];if(!seq?.length)return;
-  const span=s.span??1;
+  const span=Math.ceil(Math.random()*(s.span??1)); // 1 ~ s.span をランダムに
   const step=scanSteps[s.id];
   const instId=document.getElementById(INST_MAP[s.layer]).value;
 

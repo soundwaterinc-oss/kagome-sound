@@ -172,7 +172,7 @@ label{color:#555;font-size:9px}
     <!-- TEMPO -->
     <div class="card">
       <div class="tag">TEMPO — <span id="tv">72</span> BPM</div>
-      <input type="range" min="30" max="200" value="72" style="width:100%" oninput="document.getElementById('tv').textContent=this.value;tempo=+this.value">
+      <input type="range" id="tempoSlider" min="10" max="200" value="72" style="width:100%">
     </div>
 
     <!-- ACTIVE LOG -->
@@ -637,6 +637,10 @@ window.toggleScanner=function(id){
 
 // ─── Playback ─────────────────────────────────────────────────────────────────
 let playing=false,tempo=72;
+document.getElementById('tempoSlider').addEventListener('input',function(){
+  tempo=+this.value;
+  document.getElementById('tv').textContent=this.value;
+});
 const INST_MAP={macro:'instMacro',mid:'instMid',micro:'instMicro'};
 const readLog=[];
 

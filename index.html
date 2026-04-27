@@ -525,7 +525,7 @@ let actx=null,mast=null,fxInput=null,workletReady=false;
 
 async function getAudio(){
   if(!actx){
-    actx=new(window.AudioContext||window.webkitAudioContext)();
+    actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'balanced'});
     const c=actx.createDynamicsCompressor();
     c.threshold.value=-14;c.ratio.value=5;c.attack.value=.005;c.release.value=.2;
     c.connect(actx.destination);mast=c;
@@ -561,6 +561,18 @@ function acquireNode(id){
 
 // ─── Synth dispatch ───────────────────────────────────────────────────────────
 
+// Polyphony pool — caps simultaneous OSC voices, steals oldest on overflow
+const _voicePool=[];
+const _MAX_VOICES=12;
+function _stealVoice(){
+  const dead=_voicePool.shift();if(!dead||!actx)return;
+  const ct=actx.currentTime;
+  dead.gain.cancelScheduledValues(ct);
+  dead.gain.setValueAtTime(dead.gain.value,ct);
+  dead.gain.linearRampToValueAtTime(0,ct+0.06);
+  setTimeout(()=>{try{dead.disconnect();}catch(e){}},200);
+}
+
 // Shared noise buffer (2s, reused to avoid GC churn)
 let _noiseBuf=null;
 function getNoiseBuf(ctx){
@@ -593,17 +605,19 @@ function makeSynth(instId,freq,vel,edge){
     if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel*2.5,closed:instId==='waveguide_cl'});setTimeout(()=>n._free=true,holdMs);return;}
   }
 
-  // OSC / Noise synths — attack wrapper for slow ADSR
+  // OSC / Noise synths — always wrap in a trackable GainNode for voice stealing
   const fx=fxInput||mast;
-  let dest=fx;
+  if(instId==='noise'){startNoiseDrone(edge?._scannerId??'s1',vel,edge,adsr);return;}
+  const voiceG=actx.createGain();voiceG.gain.value=1;voiceG.connect(fx);
+  let dest=voiceG;
   if(adsr.a>0.05){
     const g=actx.createGain();
     g.gain.setValueAtTime(0,t);
     g.gain.linearRampToValueAtTime(1,t+adsr.a);
-    g.connect(fx);dest=g;
+    g.connect(voiceG);dest=g;
   }
-
-  if(instId==='noise'){startNoiseDrone(edge?._scannerId??'s1',vel,edge,adsr);return;}
+  _voicePool.push(voiceG);
+  if(_voicePool.length>_MAX_VOICES)_stealVoice();
   ({piano:synthPiano,organ:synthOrgan,fm:synthFM,rhodes:synthRhodes,prophet:synthProphet}[instId]||synthPiano)(actx,dest,freq,vel,t,edge);
 }
 
@@ -697,9 +711,9 @@ function synthPiano(ctx,d,f,v,t,edge){
   // Master envelope
   const mg=ctx.createGain();
   mg.gain.setValueAtTime(0,t);
-  mg.gain.linearRampToValueAtTime(v*0.54,t+0.08);
-  mg.gain.exponentialRampToValueAtTime(v*0.42,t+0.55);
-  mg.gain.setValueAtTime(v*0.42,t+dur-0.22);
+  mg.gain.linearRampToValueAtTime(v*0.85,t+0.08);
+  mg.gain.exponentialRampToValueAtTime(v*0.68,t+0.55);
+  mg.gain.setValueAtTime(v*0.68,t+dur-0.22);
   mg.gain.exponentialRampToValueAtTime(0.0001,t+dur);
   mg.connect(d);
 
@@ -725,8 +739,8 @@ function synthPiano(ctx,d,f,v,t,edge){
   const bsrc=ctx.createBufferSource();bsrc.buffer=getNoiseBuf(ctx);bsrc.loop=true;
   const bhp=ctx.createBiquadFilter();bhp.type='highpass';bhp.frequency.value=falset?2200:1300;
   const bg=ctx.createGain();
-  bg.gain.setValueAtTime(v*(falset?0.030:0.050),t);
-  bg.gain.setValueAtTime(v*(falset?0.030:0.050),t+dur-0.22);
+  bg.gain.setValueAtTime(v*(falset?0.045:0.072),t);
+  bg.gain.setValueAtTime(v*(falset?0.045:0.072),t+dur-0.22);
   bg.gain.exponentialRampToValueAtTime(0.0001,t+dur);
   bsrc.connect(bhp);bhp.connect(bg);bg.connect(d);
   bsrc.start(t);bsrc.stop(t+dur+0.1);

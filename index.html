@@ -204,6 +204,40 @@ label{color:#555;font-size:9px}
       <input type="range" id="tempoSlider" min="10" max="200" value="72" style="width:100%">
     </div>
 
+    <!-- FX -->
+    <div class="card">
+      <div class="tag">FX</div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;align-items:center;gap:4px">
+          <button class="btn" id="reverbBtn" onclick="toggleReverb()" style="min-width:44px;font-size:8px;padding:1px 4px">REVERB</button>
+          <span style="color:#555;font-size:9px;min-width:18px">wet</span>
+          <input type="range" min="0" max="1" step="0.01" value="0.35" id="reverbWet" oninput="updateFX()" style="flex:1">
+          <span id="reverbWetV" style="font-size:9px;color:#666;min-width:26px;text-align:right">35%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;padding-left:50px">
+          <span style="color:#555;font-size:9px;min-width:18px">size</span>
+          <input type="range" min="0.3" max="12" step="0.1" value="4" id="reverbSize" oninput="updateFX()" style="flex:1">
+          <span id="reverbSizeV" style="font-size:9px;color:#666;min-width:26px;text-align:right">4.0s</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
+          <button class="btn" id="delayBtn" onclick="toggleDelay()" style="min-width:44px;font-size:8px;padding:1px 4px">DELAY</button>
+          <span style="color:#555;font-size:9px;min-width:18px">wet</span>
+          <input type="range" min="0" max="1" step="0.01" value="0.25" id="delayWet" oninput="updateFX()" style="flex:1">
+          <span id="delayWetV" style="font-size:9px;color:#666;min-width:26px;text-align:right">25%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;padding-left:50px">
+          <span style="color:#555;font-size:9px;min-width:18px">time</span>
+          <input type="range" min="30" max="2000" step="10" value="375" id="delayTime" oninput="updateFX()" style="flex:1">
+          <span id="delayTimeV" style="font-size:9px;color:#666;min-width:26px;text-align:right">375ms</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;padding-left:50px">
+          <span style="color:#555;font-size:9px;min-width:18px">feed</span>
+          <input type="range" min="0" max="0.92" step="0.01" value="0.4" id="delayFeed" oninput="updateFX()" style="flex:1">
+          <span id="delayFeedV" style="font-size:9px;color:#666;min-width:26px;text-align:right">0.40</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ACTIVE LOG -->
     <div class="card">
       <div class="tag">ACTIVE</div>
@@ -487,7 +521,7 @@ async function loadFile(file){
 }
 
 // ─── Audio context + Worklets ─────────────────────────────────────────────────
-let actx=null,mast=null,workletReady=false;
+let actx=null,mast=null,fxInput=null,workletReady=false;
 
 async function getAudio(){
   if(!actx){
@@ -495,6 +529,7 @@ async function getAudio(){
     const c=actx.createDynamicsCompressor();
     c.threshold.value=-14;c.ratio.value=5;c.attack.value=.005;c.release.value=.2;
     c.connect(actx.destination);mast=c;
+    setupFX(actx);
   }
   if(actx.state==='suspended')await actx.resume();
   if(!workletReady){
@@ -518,7 +553,7 @@ function acquireNode(id){
     try{
       const wname=id==='karplus'?'karplus-strong':'waveguide';
       n=new AudioWorkletNode(actx,wname);
-      n.connect(mast);pool.push(n);
+      n.connect(fxInput||mast);pool.push(n);
     }catch(e){return null;}
   }
   n._free=false;return n;
@@ -559,12 +594,13 @@ function makeSynth(instId,freq,vel,edge){
   }
 
   // OSC / Noise synths — attack wrapper for slow ADSR
-  let dest=mast;
+  const fx=fxInput||mast;
+  let dest=fx;
   if(adsr.a>0.05){
     const g=actx.createGain();
     g.gain.setValueAtTime(0,t);
     g.gain.linearRampToValueAtTime(1,t+adsr.a);
-    g.connect(mast);dest=g;
+    g.connect(fx);dest=g;
   }
 
   if(instId==='noise'){startNoiseDrone(edge?._scannerId??'s1',vel,edge,adsr);return;}
@@ -597,7 +633,7 @@ function startNoiseDrone(scannerId,vel,edge,adsr){
   const peak=vel*0.6;
   g.gain.setValueAtTime(0,t);
   g.gain.linearRampToValueAtTime(peak,t+Math.max(adsr.a,0.005));
-  src.connect(bp);bp.connect(g);g.connect(mast);
+  src.connect(bp);bp.connect(g);g.connect(fxInput||mast);
   src.start(t);
   droneState[scannerId]={src,gain:g,filter:bp,peak};
 }
@@ -814,6 +850,82 @@ document.getElementById('pb').onclick=async function(){
     await getAudio();
     playing=true;this.textContent='■ STOP';
     SCANNER_DEFS.forEach(s=>{if(s.active)startScanner(s);});
+  }
+};
+
+// ─── FX (Reverb + Delay) ──────────────────────────────────────────────────────
+let reverbEnabled=false,delayEnabled=false,fxNodes=null,_irTimer=null;
+
+function makeIR(ctx,duration=4,decay=2.8){
+  const len=Math.round(ctx.sampleRate*duration);
+  const ir=ctx.createBuffer(2,len,ctx.sampleRate);
+  // Early reflections + exponential tail
+  for(let ch=0;ch<2;ch++){
+    const d=ir.getChannelData(ch);
+    for(let i=0;i<len;i++){
+      const env=Math.pow(1-i/len,decay);
+      // Sparse early reflections in first 80ms
+      const t=i/ctx.sampleRate;
+      const early=t<0.08?(Math.random()<0.03?Math.random()*2-1:0)*1.2:0;
+      d[i]=(Math.random()*2-1)*env+early;
+    }
+  }
+  return ir;
+}
+
+function setupFX(ctx){
+  fxInput=ctx.createGain();
+  // Dry path (always on)
+  const dry=ctx.createGain();dry.gain.value=1;
+  fxInput.connect(dry);dry.connect(mast);
+  // Reverb
+  const reverbSend=ctx.createGain();reverbSend.gain.value=0;
+  const convolver=ctx.createConvolver();
+  convolver.buffer=makeIR(ctx,4,2.8);
+  const reverbReturn=ctx.createGain();reverbReturn.gain.value=1;
+  fxInput.connect(reverbSend);reverbSend.connect(convolver);convolver.connect(reverbReturn);reverbReturn.connect(mast);
+  // Delay
+  const delaySend=ctx.createGain();delaySend.gain.value=0;
+  const delayNode=ctx.createDelay(4.0);delayNode.delayTime.value=0.375;
+  const feedbackGain=ctx.createGain();feedbackGain.gain.value=0;
+  const delayReturn=ctx.createGain();delayReturn.gain.value=0.75;
+  delayNode.connect(feedbackGain);feedbackGain.connect(delayNode);
+  fxInput.connect(delaySend);delaySend.connect(delayNode);delayNode.connect(delayReturn);delayReturn.connect(mast);
+  fxNodes={reverbSend,convolver,reverbReturn,delaySend,delayNode,feedbackGain,delayReturn};
+  updateFX();
+}
+
+window.toggleReverb=function(){
+  reverbEnabled=!reverbEnabled;
+  document.getElementById('reverbBtn').classList.toggle('on',reverbEnabled);
+  updateFX();
+};
+window.toggleDelay=function(){
+  delayEnabled=!delayEnabled;
+  document.getElementById('delayBtn').classList.toggle('on',delayEnabled);
+  updateFX();
+};
+window.updateFX=function(){
+  // Update display values always
+  const rw=+document.getElementById('reverbWet').value;
+  document.getElementById('reverbWetV').textContent=Math.round(rw*100)+'%';
+  const rs=+document.getElementById('reverbSize').value;
+  document.getElementById('reverbSizeV').textContent=rs.toFixed(1)+'s';
+  const dw=+document.getElementById('delayWet').value;
+  document.getElementById('delayWetV').textContent=Math.round(dw*100)+'%';
+  const dt=+document.getElementById('delayTime').value;
+  document.getElementById('delayTimeV').textContent=dt+'ms';
+  const df=+document.getElementById('delayFeed').value;
+  document.getElementById('delayFeedV').textContent=df.toFixed(2);
+  if(!fxNodes)return;
+  fxNodes.reverbSend.gain.setTargetAtTime(reverbEnabled?rw:0,actx.currentTime,0.02);
+  fxNodes.feedbackGain.gain.setTargetAtTime(delayEnabled?df:0,actx.currentTime,0.02);
+  fxNodes.delaySend.gain.setTargetAtTime(delayEnabled?dw:0,actx.currentTime,0.02);
+  fxNodes.delayNode.delayTime.setTargetAtTime(dt/1000,actx.currentTime,0.01);
+  // Rebuild IR only when size changes, debounced
+  if(reverbEnabled){
+    clearTimeout(_irTimer);
+    _irTimer=setTimeout(()=>{if(actx&&fxNodes)fxNodes.convolver.buffer=makeIR(actx,rs,2.8);},350);
   }
 };
 

@@ -843,7 +843,7 @@ window.updateADSR=function(){
     const d=+document.getElementById(`adsr_${layer}_d`).value;
     const s=+document.getElementById(`adsr_${layer}_s`).value;
     const r=+document.getElementById(`adsr_${layer}_r`).value;
-    const aMs=msFromSlider(a,60000),dMs=msFromSlider(d,60000),rMs=msFromSlider(r,120000);
+    const aMs=msFromSlider(a,300000),dMs=msFromSlider(d,300000),rMs=msFromSlider(r,600000);
     ADSR[layer]={a:aMs/1000,d:dMs/1000,s,r:rMs/1000};
     document.getElementById(`adsr_${layer}_av`).textContent=fmtMs(aMs);
     document.getElementById(`adsr_${layer}_dv`).textContent=fmtMs(dMs);

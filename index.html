@@ -658,10 +658,72 @@ function stopAllNoiseDrones(){
   }
 }
 
-function synthPiano(ctx,d,f,v,t){[[1,.35],[2,.16],[3,.08],[4,.03]].forEach(([h,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;o.detune.value=h*2.5;o.connect(g);g.connect(d);const dec=0.4+Math.pow(180/Math.max(f,60),.5)*.7;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*a,t+.005);g.gain.exponentialRampToValueAtTime(v*a*.35,t+.1);g.gain.exponentialRampToValueAtTime(.001,t+dec);o.start(t);o.stop(t+dec+.01);});}
+function synthPiano(ctx,d,f,v,t){
+  const dec=Math.max(0.6,0.5+Math.pow(180/Math.max(f,60),0.55)*1.2);
+  // 倍音ごとに非調和デチューン、フィルタースイープ、減衰速度を変える
+  [[1,0.36,0],[2,0.20,4],[3,0.13,10],[4,0.07,18],[5,0.04,28]].forEach(([h,amp,det])=>{
+    const o=ctx.createOscillator(),fi=ctx.createBiquadFilter(),g=ctx.createGain();
+    o.type='triangle';o.frequency.value=f*h;o.detune.value=det;
+    fi.type='lowpass';
+    fi.frequency.setValueAtTime(Math.min(f*h*5,18000),t);
+    fi.frequency.exponentialRampToValueAtTime(Math.min(f*h*1.3,9000),t+dec*0.25);
+    const hd=dec*Math.pow(0.72,h-1); // 高次倍音ほど速く減衰
+    o.connect(fi);fi.connect(g);g.connect(d);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(v*amp,t+0.004);
+    g.gain.exponentialRampToValueAtTime(v*amp*0.38,t+0.07);
+    g.gain.exponentialRampToValueAtTime(0.001,t+hd);
+    o.start(t);o.stop(t+hd+0.01);
+  });
+  // ハンマーノイズ（打鍵クリック）
+  const ns=Math.round(ctx.sampleRate*0.018);
+  const nb=ctx.createBuffer(1,ns,ctx.sampleRate);
+  const nd=nb.getChannelData(0);
+  for(let i=0;i<ns;i++)nd[i]=(Math.random()*2-1)*Math.pow(1-i/ns,2.5);
+  const nsrc=ctx.createBufferSource();nsrc.buffer=nb;
+  const nfi=ctx.createBiquadFilter();nfi.type='bandpass';nfi.frequency.value=Math.min(f*5,7000);nfi.Q.value=2;
+  const ng=ctx.createGain();ng.gain.setValueAtTime(v*0.22,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.025);
+  nsrc.connect(nfi);nfi.connect(ng);ng.connect(d);nsrc.start(t);nsrc.stop(t+0.03);
+}
+
+function synthRhodes(ctx,d,f,v,t){
+  const dec=Math.max(0.7,0.55+(160/Math.max(f,60))*0.28);
+  // FM方式: carrier/modulator比1:1 → ローズ固有の倍音キャラ
+  const car=ctx.createOscillator(),mod=ctx.createOscillator(),modg=ctx.createGain(),g=ctx.createGain();
+  car.type='sine';mod.type='sine';car.frequency.value=f;mod.frequency.value=f;
+  // モジュレーション指数が時間で落ちる = アタック時は明るく、サステインは暖かく
+  const mi=f*1.9;
+  modg.gain.setValueAtTime(mi,t);
+  modg.gain.exponentialRampToValueAtTime(mi*0.10,t+0.28);
+  modg.gain.exponentialRampToValueAtTime(mi*0.03,t+dec*0.55);
+  mod.connect(modg);modg.connect(car.frequency);
+  car.connect(g);g.connect(d);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*0.52,t+0.005);
+  g.gain.exponentialRampToValueAtTime(v*0.30,t+0.10);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dec);
+  car.start(t);mod.start(t);car.stop(t+dec+0.01);mod.stop(t+dec+0.01);
+  // トレモロLFO
+  const lfo=ctx.createOscillator(),lfog=ctx.createGain();
+  lfo.frequency.value=4.8;lfog.gain.value=v*0.032;
+  lfo.connect(lfog);lfog.connect(g.gain);lfo.start(t);lfo.stop(t+dec+0.01);
+}
+
+function synthOrgan(ctx,d,f,v,t){
+  // サブオクターブ付きドローバー倍音列
+  [[0.5,0.10],[1,0.34],[2,0.22],[3,0.12],[4,0.07],[6,0.04]].forEach(([h,amp])=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*amp,t+0.010); // organクリック
+    g.gain.setValueAtTime(v*amp,t+1.35);g.gain.linearRampToValueAtTime(0.001,t+1.42);
+    o.connect(g);g.connect(d);o.start(t);o.stop(t+1.46);
+  });
+  // Leslieロータリー: わずかにデチューンした2本で揺らぎ
+  [[f*1.004,0.06],[f*0.996,0.06]].forEach(([fr,amp])=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=fr;
+    g.gain.value=v*amp;o.connect(g);g.connect(d);o.start(t);o.stop(t+1.46);
+  });
+}
+
 function synthProphet(ctx,d,f,v,t){[f*.995,f*1.005].forEach(fr=>{const o=ctx.createOscillator(),fi=ctx.createBiquadFilter(),g=ctx.createGain();o.type='sawtooth';o.frequency.value=fr;fi.type='lowpass';fi.Q.value=3.5;fi.frequency.setValueAtTime(180,t);fi.frequency.exponentialRampToValueAtTime(f*6,t+.05);fi.frequency.exponentialRampToValueAtTime(f*1.5,t+.38);o.connect(fi);fi.connect(g);g.connect(d);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*.16,t+.01);g.gain.setValueAtTime(v*.16,t+.26);g.gain.exponentialRampToValueAtTime(.001,t+.65);o.start(t);o.stop(t+.66);});}
-function synthOrgan(ctx,d,f,v,t){[[1,.32],[2,.16],[4,.1],[3,.07]].forEach(([h,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f*h;g.gain.value=v*a;o.connect(g);g.connect(d);o.start(t);o.stop(t+.5);});}
-function synthRhodes(ctx,d,f,v,t){const mg=ctx.createGain();mg.connect(d);const dec=0.38+(90/Math.max(f,60))*.22;[[f,.38],[f*1.003,.17]].forEach(([fr,a])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=fr;o.connect(g);g.connect(mg);g.gain.setValueAtTime(v*a,t);g.gain.exponentialRampToValueAtTime(.001,t+dec);o.start(t);o.stop(t+dec+.01);});const tl=ctx.createOscillator(),tg=ctx.createGain();tl.frequency.value=4.2;tg.gain.value=.07;tl.connect(tg);tg.connect(mg.gain);tl.start(t);tl.stop(t+dec+.01);}
 function synthFM(ctx,d,f,v,t){const car=ctx.createOscillator(),mod=ctx.createOscillator(),mg=ctx.createGain(),g=ctx.createGain();car.type='sine';mod.type='sine';car.frequency.value=f;mod.frequency.value=f*1.414;mg.gain.setValueAtTime(f*2.2,t);mg.gain.exponentialRampToValueAtTime(f*.25,t+.28);mod.connect(mg);mg.connect(car.frequency);car.connect(g);g.connect(d);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*.42,t+.007);g.gain.exponentialRampToValueAtTime(.001,t+.48);car.start(t);mod.start(t);car.stop(t+.49);mod.stop(t+.49);}
 
 // ─── MIDI ─────────────────────────────────────────────────────────────────────

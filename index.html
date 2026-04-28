@@ -561,6 +561,23 @@ function nextInterval(baseMs,stepIdx){
 }
 
 // ─── Source switching ─────────────────────────────────────────────────────────
+let MIXED_LAYERS={macro:[],mid:[],micro:[]};
+
+function buildMixedLayers(){
+  // Base: all single edges (original LAYERS) → ~50% of pool
+  const M={macro:[...LAYERS.macro],mid:[...LAYERS.mid],micro:[...LAYERS.micro]};
+  // Medium chains (2-4 segs): boost ×4 → ~20%
+  // Long chains (5+ segs):   boost ×8 → ~10%
+  for(const c of ALL_CHAINS){
+    if(!c.segs||c.segs.length<2)continue;
+    const reps=c.segs.length>=5?8:4;
+    const key=c.layer;
+    if(!M[key])continue;
+    for(let i=0;i<reps;i++)M[key].push(c);
+  }
+  MIXED_LAYERS=M;
+}
+
 function applyEdges(edges){
   ALL_EDGES=edges;
   ALL_CHAINS=buildChains(edges);
@@ -574,10 +591,11 @@ function applyEdges(edges){
     mid:ALL_CHAINS.filter(c=>c.layer==='mid'),
     micro:ALL_CHAINS.filter(c=>c.layer==='micro'),
   };
+  buildMixedLayers();
   SCANNER_DEFS.forEach(s=>{SEQS[s.id]=sortedForScanner(s);scanSteps[s.id]=0;});
   draw();
   const el=document.getElementById('svgStatus');
-  if(el&&sourceMode==='svg')el.textContent=`${edges.length} segs → ${ALL_CHAINS.length} chains (mac:${CHAIN_LAYERS.macro.length} mid:${CHAIN_LAYERS.mid.length} mic:${CHAIN_LAYERS.micro.length})`;
+  if(el&&sourceMode==='svg')el.textContent=`${edges.length} segs / ${ALL_CHAINS.length} chains`;
 }
 
 window.switchSource=function(mode){
@@ -938,6 +956,7 @@ window.onMidiOutSelect=function(){
 const cv=document.getElementById('kc'),cx2=cv.getContext('2d');
 const activeEdges=new Map();
 
+// Draw a single edge or a chain as a polyline (for active highlights)
 function drawItem(item){
   if(item.pts){
     cx2.moveTo(item.pts[0].x,item.pts[0].y);
@@ -947,14 +966,15 @@ function drawItem(item){
 
 function draw(){
   cx2.clearRect(0,0,W,H);cx2.fillStyle='#0a0a0a';cx2.fillRect(0,0,W,H);
-  const items=ALL_CHAINS.length?ALL_CHAINS:ALL_EDGES;
-  for(const item of items){
-    const alpha=item.layer==='macro'?.7:item.layer==='mid'?.55:.35;
-    const lw=item.layer==='macro'?1.8:item.layer==='mid'?1.1:.6;
-    cx2.strokeStyle=(item.baseColor||'rgba(100,120,200,')+(alpha+(item.diagScore??0.5)*.2)+')';
-    cx2.lineWidth=lw;cx2.lineCap='round';cx2.lineJoin='round';
-    cx2.beginPath();drawItem(item);cx2.stroke();
+  // Static display: always individual segments (original look)
+  for(const e of ALL_EDGES){
+    const alpha=e.layer==='macro'?.7:e.layer==='mid'?.55:.35;
+    const lw=e.layer==='macro'?1.8:e.layer==='mid'?1.1:.6;
+    cx2.strokeStyle=(e.baseColor||'rgba(100,120,200,')+(alpha+(e.diagScore??0.5)*.2)+')';
+    cx2.lineWidth=lw;cx2.lineCap='round';
+    cx2.beginPath();cx2.moveTo(e.p1.x,e.p1.y);cx2.lineTo(e.p2.x,e.p2.y);cx2.stroke();
   }
+  // Active item: draw as chain polyline so long lines light up fully
   activeEdges.forEach((item,sid)=>{
     if(!item)return;
     const s=SCANNER_DEFS.find(x=>x.id===sid);if(!s||!s.active)return;
@@ -976,7 +996,8 @@ const SCANNER_DEFS=[
 ];
 
 function sortedForScanner(s){
-  const src=ALL_CHAINS.length?CHAIN_LAYERS:LAYERS;
+  // MIXED_LAYERS: single edges (×1) + medium chains (×4) + long chains (×8)
+  const src=MIXED_LAYERS[s.layer]?.length?MIXED_LAYERS:LAYERS;
   const items=[...(src[s.layer]||[])];
   if(s.scan==='diag') items.sort((a,b)=>a.diagScore-b.diagScore);
   else if(s.scan==='x') items.sort((a,b)=>a.mx-b.mx);

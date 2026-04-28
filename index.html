@@ -304,7 +304,7 @@ let ALL_EDGES=[],LAYERS={macro:[],mid:[],micro:[]};
 let ALL_CHAINS=[],CHAIN_LAYERS={macro:[],mid:[],micro:[]};
 
 // Chain collinear adjacent edges into longer lines (crosses intersections)
-function buildChains(edges,angTol=20){
+function buildChains(edges,angTol=20,maxSegs=Infinity){
   if(!edges.length)return[];
   const snap=1.5;
   const ptKey=p=>`${Math.round(p.x/snap)}_${Math.round(p.y/snap)}`;
@@ -332,6 +332,7 @@ function buildChains(edges,angTol=20){
 
     // Extend forward
     for(;;){
+      if(segs.length>=maxSegs)break;
       const tail=pts[pts.length-1];
       const cands=(adj.get(ptKey(tail))||[]).filter(({e})=>!used.has(e)&&aDiff(e.ang,ang)<angTol);
       if(!cands.length)break;
@@ -340,6 +341,7 @@ function buildChains(edges,angTol=20){
     }
     // Extend backward
     for(;;){
+      if(segs.length>=maxSegs)break;
       const head=pts[0];
       const cands=(adj.get(ptKey(head))||[]).filter(({e})=>!used.has(e)&&aDiff(e.ang,ang)<angTol);
       if(!cands.length)break;
@@ -561,6 +563,7 @@ function nextInterval(baseMs,stepIdx){
 }
 
 // ─── Source switching ─────────────────────────────────────────────────────────
+let DISPLAY_CHAINS=[];
 let MIXED_LAYERS={macro:[],mid:[],micro:[]};
 
 function buildMixedLayers(){
@@ -580,7 +583,8 @@ function buildMixedLayers(){
 
 function applyEdges(edges){
   ALL_EDGES=edges;
-  ALL_CHAINS=buildChains(edges);
+  ALL_CHAINS=buildChains(edges,20);         // unlimited — for scan pool
+  DISPLAY_CHAINS=buildChains(edges,20,5);   // max 5 segs — for overlay display
   LAYERS={
     macro:ALL_EDGES.filter(e=>e.layer==='macro'),
     mid:ALL_EDGES.filter(e=>e.layer==='mid'),
@@ -966,15 +970,27 @@ function drawItem(item){
 
 function draw(){
   cx2.clearRect(0,0,W,H);cx2.fillStyle='#0a0a0a';cx2.fillRect(0,0,W,H);
-  // Static display: always individual segments (original look)
+
+  // Layer 1: individual segments — dim/thin (original look)
   for(const e of ALL_EDGES){
-    const alpha=e.layer==='macro'?.7:e.layer==='mid'?.55:.35;
-    const lw=e.layer==='macro'?1.8:e.layer==='mid'?1.1:.6;
-    cx2.strokeStyle=(e.baseColor||'rgba(100,120,200,')+(alpha+(e.diagScore??0.5)*.2)+')';
+    const alpha=e.layer==='macro'?.45:e.layer==='mid'?.32:.20;
+    const lw=e.layer==='macro'?1.1:e.layer==='mid'?.75:.45;
+    cx2.strokeStyle=(e.baseColor||'rgba(100,120,200,')+(alpha+(e.diagScore??0.5)*.12)+')';
     cx2.lineWidth=lw;cx2.lineCap='round';
     cx2.beginPath();cx2.moveTo(e.p1.x,e.p1.y);cx2.lineTo(e.p2.x,e.p2.y);cx2.stroke();
   }
-  // Active item: draw as chain polyline so long lines light up fully
+
+  // Layer 2: medium chains (2-5 segs) — brighter polylines on top
+  for(const c of DISPLAY_CHAINS){
+    if(!c.segs||c.segs.length<2)continue;
+    const alpha=c.layer==='macro'?.80:c.layer==='mid'?.62:.42;
+    const lw=c.layer==='macro'?1.9:c.layer==='mid'?1.3:.8;
+    cx2.strokeStyle=(c.baseColor||'rgba(100,120,200,')+(alpha+(c.diagScore??0.5)*.18)+')';
+    cx2.lineWidth=lw;cx2.lineCap='round';cx2.lineJoin='round';
+    cx2.beginPath();drawItem(c);cx2.stroke();
+  }
+
+  // Active item highlight
   activeEdges.forEach((item,sid)=>{
     if(!item)return;
     const s=SCANNER_DEFS.find(x=>x.id===sid);if(!s||!s.active)return;

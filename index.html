@@ -354,7 +354,7 @@ function buildChains(edges,angTol=20,maxSegs=Infinity){
     const mx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
     const my=pts.reduce((s,p)=>s+p.y,0)/pts.length;
     chains.push({
-      pts,p1:pts[0],p2:pts[pts.length-1],
+      pts,segs,p1:pts[0],p2:pts[pts.length-1],
       ang,angBin:startEdge.angBin,
       len:totalLen,lenNorm:0,mx,my,
       diagScore:segs.reduce((s,e)=>s+e.diagScore,0)/n,

@@ -723,7 +723,7 @@ function makeSynth(instId,freq,vel,edge){
   if((instId==='waveguide'||instId==='waveguide_cl')&&workletReady){
     const n=acquireNode(instId);
     const holdMs=Math.max(3500,(adsr.a+adsr.d+adsr.r)*1000+800);
-    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel*2.5,closed:instId==='waveguide_cl'});setTimeout(()=>n._free=true,holdMs);return;}
+    if(n){n.port.postMessage({type:'trigger',frequency:freq,velocity:vel*2.5,closed:instId==='waveguide_cl',duration:holdMs/1000});setTimeout(()=>n._free=true,holdMs);return;}
   }
 
   // OSC / Noise synths — always wrap in a trackable GainNode for voice stealing

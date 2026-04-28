@@ -649,7 +649,7 @@ async function getAudio(){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'balanced'});
     const c=actx.createDynamicsCompressor();
     c.threshold.value=-14;c.ratio.value=5;c.attack.value=.005;c.release.value=.2;
-    const masterOut=actx.createGain();masterOut.gain.value=0.562;// -5dB
+    const masterOut=actx.createGain();masterOut.gain.value=0.316;// -10dB
     c.connect(masterOut);masterOut.connect(actx.destination);mast=c;
     setupFX(actx);
   }

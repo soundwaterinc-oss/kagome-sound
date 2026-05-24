@@ -256,7 +256,13 @@ label{color:#555;font-size:9px}
 </div>
 
 <!-- ═══════════════════════ SCRIPT ═══════════════════════ -->
+<script src="shared/el-systema-shapes.js"></script>
+<script src="shared/el-systema-transport.js"></script>
+<script src="shared/el-systema-control.js"></script>
 <script type="module">
+if(typeof window.registerElSystemaInstrument !== "function"){
+  window.registerElSystemaInstrument=function(){};
+}
 
 // ─── Kagome geometry ──────────────────────────────────────────────────────────
 const sq3=Math.sqrt(3),S=13,W=270,H=270,PAD=3,CX=W/2,CY=H/2,L2=2*S/sq3;
@@ -643,6 +649,85 @@ async function loadFile(file){
 
 // ─── Audio context + Worklets ─────────────────────────────────────────────────
 let actx=null,mast=null,fxInput=null,workletReady=false;
+let kagomeRelay=null,kagomeRelayCtx=null;
+
+function applyRemoteControl(name,value){
+  const el=document.getElementById(name)||document.querySelector(`[name="${name}"]`);
+  if(!el)return false;
+  if(el.tagName==='SELECT'){
+    el.value=String(value);
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    return true;
+  }
+  if(el.type==='checkbox'){
+    el.checked=!!value;
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    return true;
+  }
+  el.value=value;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
+}
+
+async function startPlayback(){
+  if(playing)return;
+  await getAudio();
+  playing=true;
+  document.getElementById('pb').textContent='■ STOP';
+  SCANNER_DEFS.forEach(s=>{if(s.active)startScanner(s);});
+}
+
+function stopPlayback(){
+  if(!playing)return;
+  playing=false;
+  SCANNER_DEFS.forEach(stopScanner);
+  stopAllNoiseDrones();
+  activeEdges.clear();
+  draw();
+  document.getElementById('pb').textContent='▶ PLAY';
+  document.getElementById('readLines').innerHTML='';
+  midiOut?.allNotesOff();
+}
+
+function registerKagomeRelay(audioContext=null,outputNode=null){
+  if(typeof window.registerElSystemaInstrument!=='function')return;
+  if(kagomeRelay&&kagomeRelayCtx===audioContext)return;
+  try{kagomeRelay?.close?.();}catch(_){}
+  kagomeRelay=window.registerElSystemaInstrument({
+    id:'kagome-sound',
+    audioContext:audioContext,
+    outputNode:outputNode,
+    play:()=>{startPlayback();},
+    stop:()=>{stopPlayback();},
+    setParam:(name,value)=>{applyRemoteControl(name,value);},
+    ramp:(name,from,to,durationSec)=>{
+      const dur=Math.max(0.001,durationSec);
+      const startMs=performance.now();
+      const tick=()=>{
+        const k=Math.min(1,((performance.now()-startMs)/1000)/dur);
+        const v=from+(to-from)*k;
+        applyRemoteControl(name,v);
+        if(k<1)requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    },
+    loadPreset:(preset)=>{
+      if(!preset||typeof preset!=='object')return;
+      for(const [k,v] of Object.entries(preset)) applyRemoteControl(k,v);
+    },
+    snapshot:()=>{
+      const snap={};
+      document.querySelectorAll('input, select').forEach(node=>{
+        if(node.id){
+          snap[node.id]=node.type==='checkbox'?!!node.checked:node.value;
+        }
+      });
+      return snap;
+    },
+  });
+  kagomeRelayCtx=audioContext||null;
+  window.__kagomeRelay=kagomeRelay;
+}
 
 async function getAudio(){
   if(!actx){
@@ -652,6 +737,7 @@ async function getAudio(){
     const masterOut=actx.createGain();masterOut.gain.value=0.178;// -15dB
     c.connect(masterOut);masterOut.connect(actx.destination);mast=c;
     setupFX(actx);
+    registerKagomeRelay(actx,mast);
   }
   if(actx.state==='suspended')await actx.resume();
   if(!workletReady){
@@ -1140,16 +1226,11 @@ function startScanner(s){
 function stopScanner(s){clearTimeout(scanTimers[s.id]);activeEdges.delete(s.id);stopNoiseDrone(s.id,ADSR[s.layer]);}
 
 document.getElementById('pb').onclick=async function(){
-  if(playing){
-    playing=false;SCANNER_DEFS.forEach(stopScanner);stopAllNoiseDrones();activeEdges.clear();draw();
-    this.textContent='▶ PLAY';document.getElementById('readLines').innerHTML='';
-    midiOut?.allNotesOff();
-  }else{
-    await getAudio();
-    playing=true;this.textContent='■ STOP';
-    SCANNER_DEFS.forEach(s=>{if(s.active)startScanner(s);});
-  }
+  if(playing)stopPlayback();
+  else await startPlayback();
 };
+
+registerKagomeRelay();
 
 // ─── FX (Reverb + Delay) ──────────────────────────────────────────────────────
 let reverbEnabled=false,delayEnabled=false,fxNodes=null,_irTimer=null;

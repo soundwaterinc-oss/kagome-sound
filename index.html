@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EL-SYSTEMA — Poly Engine</title>
+<link rel="icon" href="data:,">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#111;color:#ccc;font-family:'Courier New',monospace;font-size:11px;overflow-x:hidden}
@@ -260,6 +261,7 @@ label{color:#555;font-size:9px}
 <script src="shared/el-systema-transport.js"></script>
 <script src="shared/el-systema-control.js"></script>
 <script type="module">
+const FIELD_ON=/[?&#]field/.test(location.href);
 if(typeof window.registerElSystemaInstrument !== "function"){
   window.registerElSystemaInstrument=function(){};
 }
@@ -648,8 +650,9 @@ async function loadFile(file){
 }
 
 // ─── Audio context + Worklets ─────────────────────────────────────────────────
-let actx=null,mast=null,fxInput=null,workletReady=false;
+let actx=null,mast=null,fieldOutput=null,fxInput=null,workletReady=false;
 let kagomeRelay=null,kagomeRelayCtx=null;
+let fieldVolume=1;
 
 function applyRemoteControl(name,value){
   const el=document.getElementById(name)||document.querySelector(`[name="${name}"]`);
@@ -690,30 +693,32 @@ function stopPlayback(){
 }
 
 function registerKagomeRelay(audioContext=null,outputNode=null){
-  if(typeof window.registerElSystemaInstrument!=='function')return;
+  if(!FIELD_ON||typeof window.registerElSystemaInstrument!=='function')return;
   if(kagomeRelay&&kagomeRelayCtx===audioContext)return;
   try{kagomeRelay?.close?.();}catch(_){}
   kagomeRelay=window.registerElSystemaInstrument({
-    id:'kagome-sound',
+    id:'kagome',
     audioContext:audioContext,
     outputNode:outputNode,
     play:()=>{startPlayback();},
     stop:()=>{stopPlayback();},
-    setParam:(name,value)=>{applyRemoteControl(name,value);},
+    setParam:(name,value)=>{elsysMacro(name,value);},
     ramp:(name,from,to,durationSec)=>{
       const dur=Math.max(0.001,durationSec);
       const startMs=performance.now();
       const tick=()=>{
         const k=Math.min(1,((performance.now()-startMs)/1000)/dur);
         const v=from+(to-from)*k;
-        applyRemoteControl(name,v);
+        elsysMacro(name,v);
         if(k<1)requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     },
     loadPreset:(preset)=>{
       if(!preset||typeof preset!=='object')return;
-      for(const [k,v] of Object.entries(preset)) applyRemoteControl(k,v);
+      for(const [k,v] of Object.entries(preset)) {
+        if(k==='volume') elsysMacro('volume',v); else applyRemoteControl(k,v);
+      }
     },
     snapshot:()=>{
       const snap={};
@@ -722,6 +727,7 @@ function registerKagomeRelay(audioContext=null,outputNode=null){
           snap[node.id]=node.type==='checkbox'?!!node.checked:node.value;
         }
       });
+      snap.volume=fieldVolume;
       return snap;
     },
   });
@@ -729,12 +735,35 @@ function registerKagomeRelay(audioContext=null,outputNode=null){
   window.__kagomeRelay=kagomeRelay;
 }
 
+function elsysMacro(name,value){
+  const v=Math.max(0,Math.min(1,+value||0));
+  if(name==='macro.a') applyRemoteControl('tempoSlider',10+190*v);
+  else if(name==='macro.b'){
+    applyRemoteControl('wA',v);
+    applyRemoteControl('wS',v*0.5);
+    applyRemoteControl('wL',v*0.3);
+  }else if(name==='macro.c'){
+    applyRemoteControl('reverbWet',v);
+    applyRemoteControl('reverbSize',0.3+11.7*v);
+    applyRemoteControl('delayWet',v);
+    applyRemoteControl('delayFeed',v*0.92);
+  }else if(name==='volume'){
+    fieldVolume=v;
+    if(actx&&fieldOutput){
+      const now=actx.currentTime;
+      fieldOutput.gain.cancelScheduledValues(now);
+      fieldOutput.gain.setValueAtTime(fieldOutput.gain.value,now);
+      fieldOutput.gain.linearRampToValueAtTime(0.178*v*v,now+0.02);
+    }
+  }else applyRemoteControl(name,value);
+}
+
 async function getAudio(){
   if(!actx){
     actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'balanced'});
     const c=actx.createDynamicsCompressor();
     c.threshold.value=-14;c.ratio.value=5;c.attack.value=.005;c.release.value=.2;
-    const masterOut=actx.createGain();masterOut.gain.value=0.178;// -15dB
+    const masterOut=actx.createGain();masterOut.gain.value=0.178;fieldOutput=masterOut;// -15dB
     c.connect(masterOut);masterOut.connect(actx.destination);mast=c;
     setupFX(actx);
     registerKagomeRelay(actx,mast);
@@ -1403,6 +1432,7 @@ await Promise.all([loadScaleDB(),loadRhythmDB()]);
 draw();
 updateADSR();
 applyLang(lang);
+if(FIELD_ON) await getAudio();
 
 </script>
 </body>
